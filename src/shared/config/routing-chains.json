@@ -34,6 +34,13 @@
       }
     ]
   },
+  "runtimeVerification": {
+    "clientSettingsPath": "~/.claude-cn/settings.json",
+    "modelSwitchDatabasePath": "~/.model-switch/model-switch.db",
+    "modelSwitchAppType": "claude-cn",
+    "modelSwitchPathPrefix": "/claude-cn",
+    "routerApiPrefix": "/v1"
+  },
   "responseRules": [
     {
       "id": "rate-limit-400-to-429",

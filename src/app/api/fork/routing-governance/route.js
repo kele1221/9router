@@ -1,6 +1,7 @@
 import { getProviderNodes } from "@/lib/localDb.js";
 import { buildRoutingGovernanceStatus } from "@/lib/fork/routingGovernance.js";
 import { loadRoutingConfig } from "@/lib/fork/routingConfig.js";
+import { loadRoutingRuntimeState } from "@/lib/fork/routingRuntime.js";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,11 @@ export async function GET() {
       getProviderNodes(),
       loadRoutingConfig(),
     ]);
+    const runtimeState = await loadRoutingRuntimeState(routingConfig.config);
     const status = buildRoutingGovernanceStatus({
       config: routingConfig.config,
       providerNodes,
+      runtimeState,
     });
     return Response.json({
       ...status,

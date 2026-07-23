@@ -11,10 +11,12 @@
 
 ## 排查顺序
 
-1. 在“链路治理”检查声明链路是否与数据库一致。
+1. 在“链路治理”确认 Claude-CN → Model-Switch、Model-Switch → 9Router、9Router → 供应商节点均通过实时校验。
 2. 在 Console Log 确认错误是否显示为 429。
 3. 确认 `modelLock_<model>` 首次约为 2 秒，而不是 30 秒。
 4. 检查供应商原始 JSON 是否包含精确的 `rate_limit_exceeded` 标记。
 5. 运行 Fork CI 中的 `upstream-error-*` 回归测试。
+
+若“Claude-CN 实时入口经过 Model-Switch”失败，新启动的 Claude-CN 会话可能绕过 Model-Switch；修复 `~/.claude-cn/settings.json` 后必须重新启动 Claude-CN 会话。已运行的进程不会自动刷新环境变量。
 
 不要把通用 400 全部改为 429，也不要依赖 Model-Switch 在 9Router 之后再次改写状态；后者无法纠正已经发生的 9Router 锁定。

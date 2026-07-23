@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   collectForkUpdateStatus: vi.fn(async () => ({
-    currentVersion: "0.5.40-k.1",
+    currentVersion: "0.5.40-k.2",
     upstream: { hasUpdate: false, aheadBy: 0 },
     sync: { status: "current" },
     fork: { hasInstallUpdate: false },
@@ -23,7 +23,7 @@ describe("fork status API", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(payload.currentVersion).toBe("0.5.40-k.1");
+    expect(payload.currentVersion).toBe("0.5.40-k.2");
     expect(payload.upstream.hasUpdate).toBe(false);
     expect(payload.sync.status).toBe("current");
 

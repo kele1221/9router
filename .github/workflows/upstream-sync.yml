@@ -110,7 +110,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
           VALIDATION_RESULT: ${{ needs.validate.result }}
-        run: gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Candidate validation result: **$VALIDATION_RESULT**. Human review and merge are still required."
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Candidate validation result: **$VALIDATION_RESULT**. Human review and merge are still required."
 
   conflict-alert:
     name: Open conflict alert

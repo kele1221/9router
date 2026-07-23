@@ -1,0 +1,48 @@
+name: Fork Release
+
+on:
+  push:
+    tags:
+      - "fork-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify tag matches the declared fork version
+        run: |
+          expected="fork-v$(node -p "require('./cli/package.json').forkVersion")"
+          test "$GITHUB_REF_NAME" = "$expected"
+
+      - name: Install build dependencies without lifecycle scripts
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm install --prefix cli --ignore-scripts --no-audit --no-fund
+
+      - name: Run unit tests
+        run: |
+          npm install --prefix tests --ignore-scripts --no-audit --no-fund
+          npm run test:fork --prefix tests
+
+      - name: Build CLI archive
+        run: npm run cli:pack
+
+      - name: Name and publish immutable release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive="$(find . -maxdepth 1 -name '9router-*.tgz' -print -quit)"
+          test -n "$archive"
+          asset="9router-${GITHUB_REF_NAME}.tgz"
+          mv "$archive" "$asset"
+          gh release create "$GITHUB_REF_NAME" "$asset" --verify-tag --generate-notes --title "9Router Fork ${GITHUB_REF_NAME}"

@@ -1,0 +1,136 @@
+name: Upstream Sync Candidate
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync-candidate
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare reviewed sync PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      has_update: ${{ steps.sync.outputs.has_update }}
+      conflict: ${{ steps.sync.outputs.conflict }}
+      conflict_files: ${{ steps.sync.outputs.conflict_files }}
+      pr_number: ${{ steps.sync.outputs.pr_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: product
+          fetch-depth: 0
+
+      - name: Create or refresh candidate branch
+        id: sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/decolua/9router.git
+          git fetch --no-tags upstream master
+          git push origin upstream/master:refs/heads/master
+
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_update=true" >> "$GITHUB_OUTPUT"
+          git switch -C sync/upstream
+          if ! git merge --no-ff --no-edit upstream/master; then
+            conflict_files="$(git diff --name-only --diff-filter=U | paste -sd ',' -)"
+            git merge --abort
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            echo "conflict_files=$conflict_files" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "conflict=false" >> "$GITHUB_OUTPUT"
+          git push --force-with-lease origin HEAD:refs/heads/sync/upstream
+
+          pr_number="$(gh pr list --base product --head sync/upstream --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$pr_number" ]; then
+            pr_url="$(gh pr create --base product --head sync/upstream --title "chore: review upstream master sync" --body "Automated candidate only. CI and human review are required; this PR is never auto-merged.")"
+            pr_number="${pr_url##*/}"
+          fi
+          gh pr edit "$pr_number" --add-assignee kele1221
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Validate candidate (read-only)
+    needs: prepare
+    if: needs.prepare.outputs.has_update == 'true' && needs.prepare.outputs.conflict != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sync/upstream
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install application dependencies without lifecycle scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Install test dependencies without lifecycle scripts
+        run: npm install --prefix tests --ignore-scripts --no-audit --no-fund
+
+      - name: Run blocking fork regression tests
+        run: npm run test:fork --prefix tests
+
+      - name: Build production application
+        run: npm run build
+
+  report:
+    name: Report candidate result
+    needs: [prepare, validate]
+    if: always() && needs.prepare.outputs.pr_number != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Comment on the candidate PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          VALIDATION_RESULT: ${{ needs.validate.result }}
+        run: gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Candidate validation result: **$VALIDATION_RESULT**. Human review and merge are still required."
+
+  conflict-alert:
+    name: Open conflict alert
+    needs: prepare
+    if: needs.prepare.outputs.conflict == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Create or update the assigned conflict issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFLICT_FILES: ${{ needs.prepare.outputs.conflict_files }}
+        run: |
+          title="Upstream sync requires manual conflict resolution"
+          issue_number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          body="The scheduled upstream merge stopped safely. Conflicts: ${CONFLICT_FILES:-unknown}. No branch was overwritten and no code was deployed."
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" --assignee kele1221
+          fi

@@ -1,10 +1,10 @@
-import pkg from "../../../package.json" with { type: "json" };
+import { FORK_CONFIG } from "./fork.js";
 
 // App configuration
 export const APP_CONFIG = {
-  name: "9Router Proxy",
+  name: "9Router Fork",
   description: "AI Infrastructure Management",
-  version: pkg.version,
+  version: FORK_CONFIG.version,
 };
 
 // GitHub configuration

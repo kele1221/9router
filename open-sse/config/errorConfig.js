@@ -41,6 +41,11 @@ export const TRANSIENT_COOLDOWN_MS = 30 * 1000;
 // Hard cap for provider-reported rate limit cooldown (e.g. codex resets_at can be 5-6h)
 export const MAX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000;
 
+// Some OpenAI-compatible gateways return HTTP 400 while the structured error
+// correctly identifies a rate limit. Normalize this marker before fallback and
+// model-lock decisions so the request follows the 429 backoff path.
+export const RATE_LIMIT_ERROR_MARKER = "rate_limit_exceeded";
+
 // Cooldown durations (ms)
 const COOLDOWN = {
   long: 2 * 60 * 1000,

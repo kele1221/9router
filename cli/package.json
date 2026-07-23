@@ -1,6 +1,8 @@
 {
   "name": "9router",
   "version": "0.5.40",
+  "forkVersion": "0.5.40-k.1",
+  "forkRepository": "https://github.com/kele1221/9router",
   "description": "9Router CLI - Start and manage 9Router server",
   "bin": {
     "9router": "./cli.js"

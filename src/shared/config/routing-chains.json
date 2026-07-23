@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "chain": {
+    "id": "local-primary-template",
+    "name": "Local primary model route (template)",
+    "hops": [
+      {
+        "id": "claude-cn",
+        "kind": "client",
+        "name": "Claude Code (claude-cn)",
+        "description": "ANTHROPIC_BASE_URL points to Model-Switch"
+      },
+      {
+        "id": "model-switch",
+        "kind": "proxy",
+        "name": "Model-Switch",
+        "url": "http://127.0.0.1:15721",
+        "description": "Local client switcher; downstream protection only"
+      },
+      {
+        "id": "9router",
+        "kind": "router",
+        "name": "9Router Fork",
+        "url": "http://127.0.0.1:20128",
+        "description": "Normalizes upstream errors before cooldown and model locking"
+      },
+      {
+        "id": "provider",
+        "kind": "provider",
+        "name": "OpenAI-compatible provider (local override required)",
+        "providerNodeId": "replace-with-local-provider-node-id",
+        "baseUrl": "https://provider.example/v1",
+        "description": "Public template only; use DATA_DIR/fork/routing-chains.local.json for the real gateway"
+      }
+    ]
+  },
+  "responseRules": [
+    {
+      "id": "rate-limit-400-to-429",
+      "title": "Normalize mislabeled OpenAI-compatible rate limits",
+      "when": {
+        "status": 400,
+        "errorCodeOrType": "rate_limit_exceeded"
+      },
+      "then": {
+        "effectiveStatus": 429,
+        "preserveBody": true,
+        "applyBeforeCooldown": true
+      },
+      "otherwise": "Preserve the original status and body"
+    }
+  ],
+  "documents": [
+    {
+      "id": "chain",
+      "title": "调用链路",
+      "description": "声明链路、端口、节点与职责边界。",
+      "path": "docs/routing/CHAIN.md"
+    },
+    {
+      "id": "runbook",
+      "title": "故障处理手册",
+      "description": "定位 400/429、模型锁定和供应商异常。",
+      "path": "docs/routing/RUNBOOK.md"
+    },
+    {
+      "id": "sync",
+      "title": "上游同步手册",
+      "description": "自动同步、PR 审核、测试与发布边界。",
+      "path": "docs/routing/UPSTREAM_SYNC.md"
+    },
+    {
+      "id": "rollback",
+      "title": "备份与回滚",
+      "description": "数据备份、迁移验证和本机回滚步骤。",
+      "path": "docs/routing/BACKUP_AND_ROLLBACK.md"
+    }
+  ]
+}

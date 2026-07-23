@@ -1,4 +1,19 @@
-import { ERROR_TYPES, DEFAULT_ERROR_MESSAGES } from "../config/errorConfig.js";
+import { ERROR_TYPES, DEFAULT_ERROR_MESSAGES, RATE_LIMIT_ERROR_MARKER } from "../config/errorConfig.js";
+
+/**
+ * Normalize known structured upstream errors without changing their payload.
+ * Only an HTTP 400 explicitly marked as rate_limit_exceeded becomes 429.
+ */
+export function normalizeUpstreamErrorStatus(statusCode, bodyText) {
+  if (statusCode !== 400 || !bodyText) return statusCode;
+  try {
+    const error = JSON.parse(bodyText)?.error;
+    if (error?.code === RATE_LIMIT_ERROR_MARKER || error?.type === RATE_LIMIT_ERROR_MARKER) {
+      return 429;
+    }
+  } catch { /* non-JSON upstream errors retain their original status */ }
+  return statusCode;
+}
 
 /**
  * Build OpenAI-compatible error response body
@@ -62,6 +77,8 @@ export async function parseUpstreamError(response, executor = null) {
   } catch {
     bodyText = "";
   }
+  const normalizedStatus = normalizeUpstreamErrorStatus(response.status, bodyText);
+  const preserveBody = normalizedStatus !== response.status;
 
   // Let executor-specific parser extract provider-specific fields (e.g. codex resetsAtMs)
   if (executor && typeof executor.parseError === "function") {
@@ -69,7 +86,15 @@ export async function parseUpstreamError(response, executor = null) {
       const parsed = executor.parseError(response, bodyText);
       if (parsed && typeof parsed === "object") {
         const msg = parsed.message || DEFAULT_ERROR_MESSAGES[response.status] || `Upstream error: ${response.status}`;
-        return { statusCode: parsed.status || response.status, message: msg, resetsAtMs: parsed.resetsAtMs };
+        return {
+          statusCode: preserveBody ? normalizedStatus : (parsed.status || response.status),
+          originalStatusCode: response.status,
+          message: msg,
+          resetsAtMs: parsed.resetsAtMs,
+          bodyText,
+          contentType: response.headers.get("content-type") || "application/json",
+          preserveBody,
+        };
       }
     } catch { /* fall through to default parsing */ }
   }
@@ -85,7 +110,14 @@ export async function parseUpstreamError(response, executor = null) {
   const messageStr = typeof message === "string" ? message : JSON.stringify(message);
   const finalMessage = messageStr || DEFAULT_ERROR_MESSAGES[response.status] || `Upstream error: ${response.status}`;
 
-  return { statusCode: response.status, message: finalMessage };
+  return {
+    statusCode: normalizedStatus,
+    originalStatusCode: response.status,
+    message: finalMessage,
+    bodyText,
+    contentType: response.headers.get("content-type") || "application/json",
+    preserveBody,
+  };
 }
 
 /**
@@ -93,15 +125,26 @@ export async function parseUpstreamError(response, executor = null) {
  * @param {number} statusCode - HTTP status code
  * @param {string} message - Error message
  * @param {number} [resetsAtMs] - Optional precise cooldown expiry (ms epoch) for provider-specific quota errors
+ * @param {{bodyText?: string, contentType?: string}} [upstream] - Raw upstream payload to preserve
  * @returns {{ success: false, status: number, error: string, response: Response, resetsAtMs?: number }}
  */
-export function createErrorResult(statusCode, message, resetsAtMs) {
+export function createErrorResult(statusCode, message, resetsAtMs, upstream = null) {
+  const response = upstream && typeof upstream.bodyText === "string"
+    ? new Response(upstream.bodyText, {
+      status: statusCode,
+      headers: {
+        "Content-Type": upstream.contentType || "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    })
+    : errorResponse(statusCode, message);
+
   return {
     success: false,
     status: statusCode,
     error: message,
     resetsAtMs,
-    response: errorResponse(statusCode, message)
+    response,
   };
 }
 
@@ -126,6 +169,20 @@ export function unavailableResponse(statusCode, message, retryAfter, retryAfterH
       }
     }
   );
+}
+
+/**
+ * Add Retry-After to an existing error response without rewriting its body.
+ */
+export function withRetryAfter(response, retryAfter) {
+  const headers = new Headers(response.headers);
+  const retryAfterSec = Math.max(Math.ceil((new Date(retryAfter).getTime() - Date.now()) / 1000), 1);
+  headers.set("Retry-After", String(retryAfterSec));
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 /**

@@ -90,7 +90,9 @@ try { ensureTrayRuntime({ silent: true }); } catch {}
 
 // Configuration constants
 const APP_NAME = pkg.name; // Use from package.json
-const INSTALL_CMD_LATEST = `npm i -g ${APP_NAME}@latest --prefer-online`;
+const DISPLAY_VERSION = pkg.forkVersion || pkg.version;
+const IS_FORK = Boolean(pkg.forkVersion);
+const FORK_RELEASES_URL = `${pkg.forkRepository || "https://github.com/kele1221/9router"}/releases`;
 
 const DEFAULT_PORT = 20128;
 const DEFAULT_HOST = "0.0.0.0";
@@ -160,7 +162,7 @@ Commands:
 `);
     process.exit(0);
   } else if (args[i] === "--version" || args[i] === "-v") {
-    console.log(pkg.version);
+    console.log(DISPLAY_VERSION);
     process.exit(0);
   }
 }
@@ -458,7 +460,7 @@ function isRestrictedEnvironment() {
 // Check if new version available, return latest version or null
 function checkForUpdate() {
   return new Promise((resolve) => {
-    if (skipUpdate) {
+    if (skipUpdate || IS_FORK) {
       resolve(null);
       return;
     }
@@ -568,7 +570,7 @@ async function showInterfaceMenu(latestVersion) {
   const menuItems = [];
 
   if (latestVersion) {
-    menuItems.push({ label: `Update to v${latestVersion} (current: v${pkg.version})`, icon: "⬆" });
+    menuItems.push({ label: `Update to v${latestVersion} (current: v${DISPLAY_VERSION})`, icon: "⬆" });
   }
 
   menuItems.push(
@@ -578,7 +580,7 @@ async function showInterfaceMenu(latestVersion) {
     { label: "Exit", icon: "🚪" }
   );
 
-  const selected = await selectMenu(`Choose Interface (v${pkg.version})`, menuItems, 0, subtitle);
+  const selected = await selectMenu(`Choose Interface (v${DISPLAY_VERSION})`, menuItems, 0, subtitle);
 
   const offset = latestVersion ? 1 : 0;
 
@@ -712,7 +714,7 @@ function startServer(updatePromise) {
     process.removeAllListeners("SIGHUP");
     process.on("SIGHUP", () => {});
 
-    console.log(`\n🚀 ${pkg.name} v${pkg.version}`);
+    console.log(`\n🚀 ${pkg.name} v${DISPLAY_VERSION}`);
     console.log(`Server: http://${displayHost}:${port}`);
 
     waitServerReady(port).then(() => {
@@ -739,9 +741,9 @@ function startServer(updatePromise) {
           isShuttingDown = true;
           const { clearScreen } = require("./src/cli/utils/display");
           clearScreen();
-          console.log(`\n⬆  Update v${pkg.version} → v${latestVersion}\n`);
-          console.log(`Run this after exit:\n`);
-          console.log(`   \x1b[33m${INSTALL_CMD_LATEST}\x1b[0m\n`);
+          console.log(`\n⬆  Update v${DISPLAY_VERSION} → v${latestVersion}\n`);
+          console.log(`Review and install the approved Fork Release:\n`);
+          console.log(`   \x1b[33m${FORK_RELEASES_URL}\x1b[0m\n`);
           cleanup();
           await killAllAppProcesses(port);
           await killProcessOnPort(port);

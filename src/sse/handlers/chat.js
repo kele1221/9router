@@ -14,7 +14,7 @@ import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 import { getTransform as getPxpipeTransform } from "@/lib/pxpipe/loader.js";
 import { appendPxpipeEvent } from "@/lib/pxpipe/events.js";
-import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
+import { errorResponse, unavailableResponse, withRetryAfter } from "open-sse/utils/error.js";
 import { handleComboChat, handleFusionChat } from "open-sse/services/combo.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -194,6 +194,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   const excludeConnectionIds = new Set();
   let lastError = null;
   let lastStatus = null;
+  let lastErrorResponse = null;
 
   while (true) {
     const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
@@ -204,6 +205,9 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         const errorMsg = lastError || credentials.lastError || "Unavailable";
         const status = lastStatus || Number(credentials.lastErrorCode) || HTTP_STATUS.SERVICE_UNAVAILABLE;
         log.warn("CHAT", `[${provider}/${model}] ${errorMsg} (${credentials.retryAfterHuman})`);
+        if (lastErrorResponse) {
+          return withRetryAfter(lastErrorResponse, credentials.retryAfter);
+        }
         return unavailableResponse(status, `[${provider}/${model}] ${errorMsg}`, credentials.retryAfter, credentials.retryAfterHuman);
       }
       if (excludeConnectionIds.size === 0) {
@@ -279,6 +283,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       excludeConnectionIds.add(credentials.connectionId);
       lastError = result.error;
       lastStatus = result.status;
+      lastErrorResponse = result.response;
       continue;
     }
 

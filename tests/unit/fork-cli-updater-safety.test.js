@@ -9,7 +9,7 @@ describe("fork CLI updater safety", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(cliDir, "package.json"), "utf8"));
     const source = fs.readFileSync(path.join(cliDir, "cli.js"), "utf8");
 
-    expect(pkg.forkVersion).toBe("0.5.40-k.2");
+    expect(pkg.forkVersion).toBe("0.5.40-k.3");
     expect(pkg.scripts["pack:cli"]).toContain("--pack-destination ..");
     expect(pkg.scripts["pack:cli"]).not.toContain("--pack-destination ../..");
     expect(source).toContain("const DISPLAY_VERSION = pkg.forkVersion || pkg.version;");

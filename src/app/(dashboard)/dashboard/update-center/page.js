@@ -26,11 +26,12 @@ export default function UpdateCenterPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadStatus = useCallback(async () => {
+  const loadStatus = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/fork/status?refresh=1", { cache: "no-store" });
+      const query = forceRefresh ? "?refresh=1" : "";
+      const response = await fetch(`/api/fork/status${query}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setStatus(await response.json());
     } catch (loadError) {
@@ -41,12 +42,16 @@ export default function UpdateCenterPage() {
   }, []);
 
   useEffect(() => {
-    loadStatus();
+    loadStatus(false);
   }, [loadStatus]);
 
   if (loading && !status) {
     return <div className="grid gap-4 lg:grid-cols-3"><CardSkeleton /><CardSkeleton /><CardSkeleton /></div>;
   }
+
+  const upstreamAvailable = status?.availability?.comparison === true;
+  const syncAvailable = status?.sync?.status && status.sync.status !== "unknown";
+  const releaseAvailable = status?.availability?.release === true;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
@@ -57,16 +62,22 @@ export default function UpdateCenterPage() {
             上游代码发现、审核同步和本机安装彼此分离；这里不会直接覆盖当前运行版本。
           </p>
         </div>
-        <Button variant="secondary" icon="refresh" loading={loading} onClick={loadStatus}>立即检查</Button>
+        <Button variant="secondary" icon="refresh" loading={loading} onClick={() => loadStatus(true)}>立即检查</Button>
       </div>
 
       {error && <Card className="border-red-500/30 text-sm text-red-600">{error}</Card>}
+      {status && !status.healthy && (
+        <Card className="border-amber-500/30 text-sm text-amber-700">
+          GitHub 状态暂无法检查；界面不会把未知状态当作已同步，定时同步工作流仍独立运行。
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="官方上游" subtitle={status?.upstream?.repository} icon="source">
           <div className="space-y-3">
-            <StateBadge ok={!status?.upstream?.hasUpdate}>
-              {status?.upstream?.hasUpdate ? `待评估 ${status.upstream.aheadBy} 个提交` : "已同步"}
+            <StateBadge ok={upstreamAvailable && !status?.upstream?.hasUpdate}>
+              {!upstreamAvailable ? "暂无法检查" :
+                status?.upstream?.hasUpdate ? `待评估 ${status.upstream.aheadBy} 个提交` : "已同步"}
             </StateBadge>
             <p className="text-sm text-text-muted">
               只负责感知 decolua/9router 的变化，不自动合并到生产分支。
@@ -77,8 +88,9 @@ export default function UpdateCenterPage() {
 
         <Card title="同步 PR" subtitle="sync/upstream → product" icon="difference">
           <div className="space-y-3">
-            <StateBadge ok={status?.sync?.status === "current"}>
-              {status?.sync?.status === "pr_open" ? `PR #${status.sync.prNumber} 待审核` :
+            <StateBadge ok={syncAvailable && status?.sync?.status === "current"}>
+              {!syncAvailable ? "暂无法检查" :
+                status?.sync?.status === "pr_open" ? `PR #${status.sync.prNumber} 待审核` :
                 status?.sync?.status === "update_available" ? "等待自动创建" : "无需同步"}
             </StateBadge>
             <p className="text-sm text-text-muted">
@@ -90,8 +102,9 @@ export default function UpdateCenterPage() {
 
         <Card title="Fork Release" subtitle={status?.fork?.repository} icon="deployed_code">
           <div className="space-y-3">
-            <StateBadge ok={!status?.fork?.hasInstallUpdate}>
-              {status?.fork?.hasInstallUpdate ? `可安装 ${status.fork.latestVersion}` : `当前 ${status?.currentVersion || "未知"}`}
+            <StateBadge ok={releaseAvailable && !status?.fork?.hasInstallUpdate}>
+              {!releaseAvailable ? `暂无法检查（当前 ${status?.currentVersion || "未知"}）` :
+                status?.fork?.hasInstallUpdate ? `可安装 ${status.fork.latestVersion}` : `当前 ${status?.currentVersion || "未知"}`}
             </StateBadge>
             <p className="text-sm text-text-muted">
               仅安装经过 CI 和发布审查的 fork-v* 构建，不再调用官方 npm 自更新。

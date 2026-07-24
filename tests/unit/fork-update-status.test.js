@@ -36,6 +36,25 @@ describe("fork update status", () => {
     expect(status.sync.prNumber).toBe(12);
     expect(status.fork.hasInstallUpdate).toBe(true);
     expect(status.fork.latestVersion).toBe("0.5.40-k.2");
+    expect(status.availability).toEqual({ comparison: true, pulls: true, release: true });
+    expect(status.healthy).toBe(true);
     expect(status.checkedAt).toBe("2026-07-23T10:00:00.000Z");
+  });
+
+  it("reports GitHub rate limiting as unknown instead of current", async () => {
+    const fetchImpl = vi.fn(async () => new Response("rate limited", { status: 403 }));
+    const { collectForkUpdateStatus } = await import("../../src/lib/fork/updateStatus.js");
+
+    const status = await collectForkUpdateStatus({
+      fetchImpl,
+      currentVersion: "0.5.40-k.2",
+      now: () => new Date("2026-07-23T10:30:00.000Z"),
+    });
+
+    expect(status.healthy).toBe(false);
+    expect(status.availability).toEqual({ comparison: false, pulls: false, release: false });
+    expect(status.upstream.comparisonStatus).toBe("unknown");
+    expect(status.sync.status).toBe("unknown");
+    expect(status.fork.latestVersion).toBeNull();
   });
 });

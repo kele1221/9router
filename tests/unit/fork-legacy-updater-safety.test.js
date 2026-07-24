@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   collectForkUpdateStatus: vi.fn(async () => ({
-    currentVersion: "0.5.40-k.2",
+    currentVersion: "0.5.40-k.3",
     upstream: { hasUpdate: true, aheadBy: 2 },
     sync: { status: "update_available" },
     fork: { hasInstallUpdate: false, latestVersion: null },
@@ -29,7 +29,7 @@ describe("legacy updater safety in fork mode", () => {
     const response = await GET();
     const payload = await response.json();
 
-    expect(payload.currentVersion).toBe("0.5.40-k.2");
+    expect(payload.currentVersion).toBe("0.5.40-k.3");
     expect(payload.hasUpdate).toBe(false);
     expect(payload.upstream.aheadBy).toBe(2);
   });

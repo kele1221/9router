@@ -24,3 +24,17 @@
 若“Claude-CN 实时入口经过 Model-Switch”失败，新启动的 Claude-CN 会话可能绕过 Model-Switch；修复 `~/.claude-cn/settings.json` 后必须重新启动 Claude-CN 会话。已运行的进程不会自动刷新环境变量。
 
 不要把通用 400 全部改为 429，也不要依赖 Model-Switch 在 9Router 之后再次改写状态；后者无法纠正已经发生的 9Router 锁定。
+
+## 使用情况首页图表
+
+Fork 在上游“使用量和分析”首页下方追加与参考项目一致的五类统计图表：
+
+1. 按模型请求数。
+2. 请求趋势，仅展示所选时段内请求量最高的 5 个模型。
+3. Token 分布。
+4. 平均延迟对比。
+5. 按 API Key 统计请求数与错误数。
+
+模型请求、错误与延迟来自 `requestDetails` 和 `usageHistory` 的本地记录；延迟卡片会明确显示实际覆盖的观测条数。Token 与 API Key 请求数来自 `usageHistory`。由于 `requestDetails` 不记录访问密钥，API Key 错误数只包含能够由 `usageHistory` 归属到密钥的错误，页面副标题会明确提示这一口径。
+
+接口 `/api/fork/usage-dashboard` 只返回 API Key 的名称或脱敏标识，不向浏览器返回原始密钥。除请求趋势外，其他图表不会截断模型或 API Key 分组。

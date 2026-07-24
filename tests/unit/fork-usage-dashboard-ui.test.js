@@ -18,7 +18,7 @@ describe("fork usage dashboard UI", () => {
     expect(notice).toContain("totalCount");
   });
 
-  it("adds four isolated Recharts panels without replacing upstream usage components", () => {
+  it("matches the five Chinese charts on the reference project's live dashboard", () => {
     const usageStats = read("src/shared/components/UsageStats.js");
     const charts = read("src/app/(dashboard)/dashboard/usage/components/fork/ForkUsageCharts.js");
 
@@ -26,11 +26,19 @@ describe("fork usage dashboard UI", () => {
     expect(usageStats).toContain("<ForkUsageCharts period={period} />");
     expect(usageStats).toContain("<UsageChart period={period} />");
     expect(charts).toContain('from "recharts"');
-    expect(charts).toContain("buildUsageAnalytics");
-    expect(charts).toContain("Requests by Model");
-    expect(charts).toContain("Provider Token Share");
-    expect(charts).toContain("Token Composition");
-    expect(charts).toContain("Usage by API Key");
+    expect(charts).toContain('/api/fork/usage-dashboard?period=');
+    expect(charts).toContain("按模型请求数");
+    expect(charts).toContain("请求趋势");
+    expect(charts).toContain("Token 分布");
+    expect(charts).toContain("平均延迟对比");
+    expect(charts).toContain("按 API Key 统计");
+    expect(charts).toContain("请求数");
+    expect(charts).toContain("错误数");
+    expect(charts).toContain("暂无统计数据");
+    expect(charts).not.toContain("Requests by Model");
+    expect(charts).not.toContain("Provider Token Share");
+    expect(charts).not.toContain("Token Composition");
+    expect(charts).not.toContain("Usage by API Key");
     expect(charts).toContain("var(--color-primary)");
   });
 });

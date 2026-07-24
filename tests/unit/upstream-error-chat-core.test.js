@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { executeMock } = vi.hoisted(() => ({ executeMock: vi.fn() }));
+const { executeMock, recordNormalizationMock } = vi.hoisted(() => ({
+  executeMock: vi.fn(),
+  recordNormalizationMock: vi.fn(async () => {}),
+}));
 
 vi.mock("../../open-sse/executors/index.js", () => ({
   getExecutor: () => ({
@@ -26,6 +29,10 @@ vi.mock("@/lib/usageDb.js", () => ({
   saveRequestDetail: vi.fn(async () => {}),
 }));
 
+vi.mock("@/lib/fork/rateLimitNormalization.js", () => ({
+  recordRateLimitNormalization: recordNormalizationMock,
+}));
+
 const { handleChatCore } = await import("../../open-sse/handlers/chatCore.js");
 
 describe("handleChatCore upstream error normalization", () => {
@@ -43,6 +50,12 @@ describe("handleChatCore upstream error normalization", () => {
       transformedBody: null,
     });
 
+    const log = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      errorLine: vi.fn(),
+    };
     const result = await handleChatCore({
       body: {
         model: "gpt-4o",
@@ -62,17 +75,23 @@ describe("handleChatCore upstream error normalization", () => {
         body: {},
         headers: { accept: "application/json" },
       },
-      log: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        errorLine: vi.fn(),
-      },
+      log,
     });
 
     expect(result.status).toBe(429);
     expect(result.response.status).toBe(429);
     expect(await result.response.text()).toBe(bodyText);
+    expect(recordNormalizationMock).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openai",
+      model: "gpt-4o",
+      connectionId: "test-connection",
+      originalStatus: 400,
+      normalizedStatus: 429,
+    }));
+    expect(log.warn).toHaveBeenCalledWith(
+      "RATE_LIMIT_NORMALIZED",
+      expect.stringContaining("upstream=400 | client=429"),
+    );
   });
 
   it("does not change the existing response-body behavior for ordinary 400 errors", async () => {
@@ -98,5 +117,6 @@ describe("handleChatCore upstream error normalization", () => {
 
     expect(result.status).toBe(400);
     expect(await result.response.text()).not.toContain("upstreamOnly");
+    expect(recordNormalizationMock).not.toHaveBeenCalled();
   });
 });

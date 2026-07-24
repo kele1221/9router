@@ -12,6 +12,7 @@ import { createErrorResult, parseUpstreamError, formatProviderError } from "../u
 import { HTTP_STATUS, TOKEN_SAVER_HEADER } from "../config/runtimeConfig.js";
 import { handleBypassRequest } from "../utils/bypassHandler.js";
 import { trackPendingRequest, appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
+import { recordRateLimitNormalization } from "@/lib/fork/rateLimitNormalization.js";
 import { getExecutor } from "../executors/index.js";
 import { supportsGrokCliReasoningEffort } from "../config/grokCli.js";
 import { buildRequestDetail, extractRequestConfig } from "./chatCore/requestDetail.js";
@@ -356,7 +357,23 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // Provider returned error
   if (!providerResponse.ok) {
     trackPendingRequest(model, provider, connectionId, false, true);
-    const { statusCode, message, resetsAtMs, bodyText, contentType, preserveBody } = await parseUpstreamError(providerResponse, executor);
+    const { statusCode, originalStatusCode, message, resetsAtMs, bodyText, contentType, preserveBody } = await parseUpstreamError(providerResponse, executor);
+    if (originalStatusCode === 400 && statusCode === 429) {
+      log?.warn?.(
+        "RATE_LIMIT_NORMALIZED",
+        `${provider}/${model} | upstream=400 | client=429`,
+      );
+      recordRateLimitNormalization({
+        provider,
+        model,
+        connectionId,
+        originalStatus: originalStatusCode,
+        normalizedStatus: statusCode,
+        occurredAt: new Date().toISOString(),
+      }).catch((error) => {
+        log?.warn?.("RATE_LIMIT_NORMALIZED", `event persistence failed: ${error.message}`);
+      });
+    }
     appendRequestLog({ model, provider, connectionId, status: `FAILED ${statusCode}` }).catch(() => { });
     saveRequestDetail(buildRequestDetail({
       provider, model, connectionId,

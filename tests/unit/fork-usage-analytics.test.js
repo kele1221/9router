@@ -1,57 +1,132 @@
 import { describe, expect, it } from "vitest";
 
-describe("fork usage analytics", () => {
-  it("builds chart series from existing usage statistics", async () => {
+describe("fork usage dashboard analytics", () => {
+  it("builds the five reference-dashboard datasets from 9Router records", async () => {
     const { buildUsageAnalytics } = await import("../../src/lib/fork/usageAnalytics.js");
-    const stats = {
-      totalPromptTokens: 1000,
-      totalCachedTokens: 250,
-      totalCompletionTokens: 500,
-      byModel: {
-        alpha: { rawModel: "alpha", provider: "dashscope", requests: 9, promptTokens: 500, completionTokens: 200, cost: 1.2 },
-        beta: { rawModel: "beta", provider: "anthropic", requests: 4, promptTokens: 300, completionTokens: 200, cost: 0.8 },
-        gamma: { rawModel: "gamma", provider: "dashscope", requests: 2, promptTokens: 200, completionTokens: 100, cost: 0.4 },
-      },
-      byProvider: {
-        dashscope: { requests: 11, promptTokens: 700, completionTokens: 300, cost: 1.6 },
-        anthropic: { requests: 4, promptTokens: 300, completionTokens: 200, cost: 0.8 },
-      },
-      byApiKey: {
-        first: { keyName: "Claude CN", requests: 3, promptTokens: 300, completionTokens: 100 },
-        second: { keyName: "Claude CN", requests: 2, promptTokens: 100, completionTokens: 50 },
-        third: { keyName: "Codex", requests: 7, promptTokens: 350, completionTokens: 200 },
-      },
-    };
+    const result = buildUsageAnalytics({
+      usageRows: [
+        {
+          timestamp: "2026-07-24T11:15:00.000Z",
+          model: "alpha",
+          apiKey: "key-a",
+          promptTokens: 100,
+          completionTokens: 50,
+          status: "success",
+          tokens: { cached_tokens: 20 },
+        },
+        {
+          timestamp: "2026-07-24T11:45:00.000Z",
+          model: "alpha",
+          apiKey: "key-a",
+          promptTokens: 200,
+          completionTokens: 100,
+          status: "error",
+          tokens: { cache_read_input_tokens: 50 },
+        },
+        {
+          timestamp: "2026-07-24T10:10:00.000Z",
+          model: "beta",
+          apiKey: "key-b",
+          promptTokens: 50,
+          completionTokens: 25,
+          status: "success",
+          tokens: {},
+        },
+        {
+          timestamp: "2026-07-20T10:10:00.000Z",
+          model: "too-old",
+          apiKey: "key-a",
+          promptTokens: 999,
+          completionTokens: 999,
+          status: "success",
+          tokens: {},
+        },
+      ],
+      detailRows: [
+        { timestamp: "2026-07-24T11:05:00.000Z", model: "alpha", status: "success", latency: { total: 1000 } },
+        { timestamp: "2026-07-24T11:35:00.000Z", model: "alpha", status: "error", latency: { total: 3000 } },
+        { timestamp: "2026-07-24T10:15:00.000Z", model: "beta", status: "success", latency: { total: 500 } },
+        { timestamp: "2026-07-20T10:15:00.000Z", model: "too-old", status: "error", latency: { total: 9000 } },
+      ],
+      apiKeyNames: { "key-a": "Claude CN", "key-b": "Codex" },
+    }, {
+      period: "24h",
+      now: new Date("2026-07-24T12:00:00.000Z"),
+      limit: 5,
+    });
 
-    expect(buildUsageAnalytics(stats, { limit: 2 })).toEqual({
-      modelRequests: [
-        { name: "alpha", provider: "dashscope", requests: 9 },
-        { name: "beta", provider: "anthropic", requests: 4 },
-      ],
-      providerTokens: [
-        { name: "dashscope", value: 1000, cost: 1.6 },
-        { name: "anthropic", value: 500, cost: 0.8 },
-      ],
-      tokenComposition: [
-        { name: "Non-cached input", value: 750 },
-        { name: "Cached input", value: 250 },
-        { name: "Output", value: 500 },
-      ],
-      apiKeyUsage: [
-        { name: "Codex", requests: 7, tokens: 550 },
-        { name: "Claude CN", requests: 5, tokens: 550 },
-      ],
+    expect(result.modelStats).toEqual([
+      {
+        model: "alpha",
+        totalRequests: 3,
+        totalErrors: 1,
+        errorRate: 33.3,
+        inputTokens: 300,
+        outputTokens: 150,
+        cachedTokens: 70,
+        avgLatencyMs: 2000,
+      },
+      {
+        model: "beta",
+        totalRequests: 1,
+        totalErrors: 0,
+        errorRate: 0,
+        inputTokens: 50,
+        outputTokens: 25,
+        cachedTokens: 0,
+        avgLatencyMs: 500,
+      },
+    ]);
+    expect(result.tokenDistribution).toEqual([
+      { name: "alpha", value: 450 },
+      { name: "beta", value: 75 },
+    ]);
+    expect(result.apiKeyStats).toEqual([
+      { name: "Claude CN", totalRequests: 2, totalErrors: 1 },
+      { name: "Codex", totalRequests: 1, totalErrors: 0 },
+    ]);
+    expect(result.requestTrend).toHaveLength(24);
+    expect(result.requestTrend.reduce((sum, bucket) => sum + bucket.alpha, 0)).toBe(3);
+    expect(result.requestTrend.reduce((sum, bucket) => sum + bucket.beta, 0)).toBe(1);
+    expect(result.coverage).toEqual({ requestSamples: 3, oldestRequestAt: "2026-07-24T10:15:00.000Z" });
+  });
+
+  it("returns empty chart datasets when no records are available", async () => {
+    const { buildUsageAnalytics } = await import("../../src/lib/fork/usageAnalytics.js");
+
+    expect(buildUsageAnalytics({}, {
+      period: "24h",
+      now: new Date("2026-07-24T12:00:00.000Z"),
+    })).toEqual({
+      modelStats: [],
+      requestTrend: [],
+      tokenDistribution: [],
+      apiKeyStats: [],
+      coverage: { requestSamples: 0, oldestRequestAt: null },
     });
   });
 
-  it("returns empty chart series for missing usage data", async () => {
+  it("limits only the trend to five models while keeping the other reference charts complete", async () => {
     const { buildUsageAnalytics } = await import("../../src/lib/fork/usageAnalytics.js");
+    const usageRows = Array.from({ length: 6 }, (_, index) => ({
+      timestamp: `2026-07-24T1${index}:10:00.000Z`,
+      model: `model-${index + 1}`,
+      apiKey: `key-${index + 1}`,
+      promptTokens: 100 - index,
+      completionTokens: 10,
+      status: "success",
+      tokens: {},
+    }));
 
-    expect(buildUsageAnalytics(null)).toEqual({
-      modelRequests: [],
-      providerTokens: [],
-      tokenComposition: [],
-      apiKeyUsage: [],
+    const result = buildUsageAnalytics({ usageRows }, {
+      period: "24h",
+      now: new Date("2026-07-24T18:00:00.000Z"),
+      limit: 5,
     });
+
+    expect(result.modelStats).toHaveLength(6);
+    expect(result.tokenDistribution).toHaveLength(6);
+    expect(result.apiKeyStats).toHaveLength(6);
+    expect(Object.keys(result.requestTrend[0]).filter((key) => key !== "timestamp")).toHaveLength(5);
   });
 });

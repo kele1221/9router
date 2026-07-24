@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { UsageStats, RequestLogger, CardSkeleton, SegmentedControl } from "@/shared/components";
 import RequestDetailsTab from "./components/RequestDetailsTab";
+import RateLimitNormalizationNotice from "./components/fork/RateLimitNormalizationNotice";
 
 const PERIODS = [
   { value: "today", label: "Today" },
@@ -62,6 +63,8 @@ function UsageContent() {
           />
         )}
       </div>
+
+      <RateLimitNormalizationNotice />
 
       {activeTab === "overview" && (
         <Suspense fallback={<CardSkeleton />}>

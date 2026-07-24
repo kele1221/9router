@@ -18,6 +18,7 @@ import dynamic from "next/dynamic";
 // Lazy-load: keeps @xyflow/react out of the shared bundle until topology renders
 const ProviderTopology = dynamic(() => import("@/app/(dashboard)/dashboard/usage/components/ProviderTopology"), { ssr: false });
 import UsageChart from "@/app/(dashboard)/dashboard/usage/components/UsageChart";
+import ForkUsageCharts from "@/app/(dashboard)/dashboard/usage/components/fork/ForkUsageCharts";
 
 function timeAgo(timestamp) {
   const diff = Math.floor((Date.now() - new Date(timestamp)) / 1000);
@@ -482,6 +483,9 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
 
       {/* Token / Cost chart - sync period */}
       {loading ? spinner : <UsageChart period={period} />}
+
+      {/* Fork-owned panels stay isolated so upstream usage components remain mergeable. */}
+      {loading ? spinner : <ForkUsageCharts period={period} />}
 
       {/* Table with dropdown selector */}
       <div className="flex flex-col gap-3">

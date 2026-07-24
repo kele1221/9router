@@ -8,14 +8,18 @@
 2. 原始 JSON 响应体保持不变。
 3. 账号回退和模型锁使用 429 指数退避，首次为 2 秒，而不是未知 400 的 30 秒。
 4. 普通 400、非 JSON 响应和其他错误码保持原样。
+5. 终端输出 `RATE_LIMIT_NORMALIZED`，并在“使用量和分析”首页显示累计次数、最近时间、供应商和模型。
+
+事件记录只保存脱敏后的连接 ID 与路由元数据，不保存供应商错误正文、请求内容或密钥。累计次数会持久化，界面最多保留最近 20 条事件摘要，并每 15 秒刷新一次。
 
 ## 排查顺序
 
 1. 在“链路治理”确认 Claude-CN → Model-Switch、Model-Switch → 9Router、9Router → 供应商节点均通过实时校验。
-2. 在 Console Log 确认错误是否显示为 429。
-3. 确认 `modelLock_<model>` 首次约为 2 秒，而不是 30 秒。
-4. 检查供应商原始 JSON 是否包含精确的 `rate_limit_exceeded` 标记。
-5. 运行 Fork CI 中的 `upstream-error-*` 回归测试。
+2. 在“使用量和分析”顶部确认出现“已自动修正供应商限流状态”提示卡。
+3. 在 Console Log 搜索 `RATE_LIMIT_NORMALIZED`，并确认错误显示为 429。
+4. 确认 `modelLock_<model>` 首次约为 2 秒，而不是 30 秒。
+5. 检查供应商原始 JSON 是否包含精确的 `rate_limit_exceeded` 标记。
+6. 运行 Fork CI 中的 `upstream-error-*` 回归测试。
 
 若“Claude-CN 实时入口经过 Model-Switch”失败，新启动的 Claude-CN 会话可能绕过 Model-Switch；修复 `~/.claude-cn/settings.json` 后必须重新启动 Claude-CN 会话。已运行的进程不会自动刷新环境变量。
 

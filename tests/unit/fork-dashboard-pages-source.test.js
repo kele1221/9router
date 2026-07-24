@@ -8,7 +8,10 @@ describe("fork dashboard pages", () => {
   it("provides a fork-aware update center", () => {
     const source = fs.readFileSync(path.join(dashboardDir, "update-center/page.js"), "utf8");
 
-    expect(source).toContain('fetch("/api/fork/status?refresh=1"');
+    expect(source).toContain('forceRefresh ? "?refresh=1" : ""');
+    expect(source).toContain('loadStatus(false)');
+    expect(source).toContain('loadStatus(true)');
+    expect(source).toContain("暂无法检查");
     expect(source).toContain("官方上游");
     expect(source).toContain("Fork Release");
     expect(source).toContain("同步 PR");

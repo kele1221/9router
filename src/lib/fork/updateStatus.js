@@ -56,13 +56,28 @@ export async function collectForkUpdateStatus({
 
   const aheadBy = Number(comparison?.ahead_by || 0);
   const hasUpstreamUpdate = aheadBy > 0;
+  const comparisonAvailable = Boolean(comparison);
+  const pullsAvailable = Array.isArray(pulls);
+  const releaseAvailable = Boolean(release);
   const syncPr = Array.isArray(pulls) ? pulls[0] : null;
   const latestVersion = normalizeReleaseVersion(release?.tag_name);
   const hasInstallUpdate = Boolean(latestVersion) && compareForkVersions(latestVersion, currentVersion) > 0;
+  const syncStatus = syncPr
+    ? "pr_open"
+    : (!comparisonAvailable || !pullsAvailable)
+      ? "unknown"
+      : hasUpstreamUpdate
+        ? "update_available"
+        : "current";
 
   return {
     currentVersion,
     checkedAt: now().toISOString(),
+    availability: {
+      comparison: comparisonAvailable,
+      pulls: pullsAvailable,
+      release: releaseAvailable,
+    },
     upstream: {
       repository: `${FORK_CONFIG.upstreamOwner}/${FORK_CONFIG.upstreamRepo}`,
       branch: FORK_CONFIG.upstreamBranch,
@@ -72,7 +87,7 @@ export async function collectForkUpdateStatus({
       compareUrl: `${FORK_CONFIG.repositoryUrl}/compare/${FORK_CONFIG.productBranch}...${FORK_CONFIG.upstreamOwner}:${FORK_CONFIG.upstreamBranch}`,
     },
     sync: {
-      status: syncPr ? "pr_open" : (hasUpstreamUpdate ? "update_available" : "current"),
+      status: syncStatus,
       prNumber: syncPr?.number || null,
       prUrl: syncPr?.html_url || null,
     },
@@ -83,6 +98,6 @@ export async function collectForkUpdateStatus({
       hasInstallUpdate,
       releaseUrl: release?.html_url || `${FORK_CONFIG.repositoryUrl}/releases`,
     },
-    healthy: Boolean(comparison),
+    healthy: comparisonAvailable && pullsAvailable && releaseAvailable,
   };
 }

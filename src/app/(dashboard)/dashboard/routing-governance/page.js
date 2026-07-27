@@ -44,6 +44,9 @@ export default function RoutingGovernancePage() {
   }
 
   const rule = status?.responseRules?.[0];
+  const rateLimitMarkers = Array.isArray(rule?.when?.errorCodeOrTypes)
+    ? rule.when.errorCodeOrTypes
+    : [rule?.when?.errorCodeOrType || "rate_limit_exceeded"];
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
@@ -79,7 +82,7 @@ export default function RoutingGovernancePage() {
         <Card title="响应归一化规则" icon="rule">
           <div className="rounded-[10px] border border-border-subtle bg-bg p-4 font-mono text-sm text-text-main">
             <p>upstream_status == {rule?.when?.status ?? 400}</p>
-            <p>error.code/type == &quot;{rule?.when?.errorCodeOrType || "rate_limit_exceeded"}&quot;</p>
+            <p>error.code/type ∈ [{rateLimitMarkers.map((marker) => `"${marker}"`).join(", ")}]</p>
             <p className="my-2 text-primary">→ effective_status = {rule?.then?.effectiveStatus ?? 429}</p>
             <p>response_body = unchanged</p>
             <p>ordinary_400 = unchanged</p>

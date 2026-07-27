@@ -19,7 +19,7 @@ const config = {
   },
   responseRules: [{
     id: "rate-limit-400-to-429",
-    when: { status: 400, errorCodeOrType: "rate_limit_exceeded" },
+    when: { status: 400, errorCodeOrTypes: ["rate_limit_exceeded", "rate_limit_error"] },
     then: { effectiveStatus: 429, preserveBody: true },
   }],
   runtimeVerification: {

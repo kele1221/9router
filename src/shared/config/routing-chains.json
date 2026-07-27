@@ -47,7 +47,10 @@
       "title": "Normalize mislabeled OpenAI-compatible rate limits",
       "when": {
         "status": 400,
-        "errorCodeOrType": "rate_limit_exceeded"
+        "errorCodeOrTypes": [
+          "rate_limit_exceeded",
+          "rate_limit_error"
+        ]
       },
       "then": {
         "effectiveStatus": 429,

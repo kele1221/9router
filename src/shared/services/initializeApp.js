@@ -1,3 +1,5 @@
+import { loadErrorRulesConfig } from "@/lib/fork/errorRulesConfig.js";
+import { setRuntimeErrorConfig } from "open-sse/config/errorConfig.js";
 import os from "os";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -80,6 +82,15 @@ export async function initializeApp() {
 }
 
 async function runHeavyStartup() {
+  // Seed runtime error rules from local config file
+  try {
+    const errorConfig = await loadErrorRulesConfig();
+    setRuntimeErrorConfig(errorConfig);
+    console.log(`[InitApp] error rules loaded (source: ${errorConfig._localConfigPath ? "local" : "template"}, ${errorConfig.errorRules.length} rules, ${errorConfig.rateLimitMarkers?.length || 0} markers)`);
+  } catch (e) {
+    console.warn(`[InitApp] error rules load failed, using defaults: ${e.message}`);
+  }
+
   await cleanupProviderConnections();
   const settings = await getSettings();
 

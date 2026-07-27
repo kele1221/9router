@@ -17,6 +17,14 @@
 - **Cursor**: HTTP/2 AgentService support + version bump 3.12.17
 - **Dashboard**: cut duplicate API/icon spam, lazy-load provider assets
 
+## [2026-07-27 16:08:00]
+1. 【链路治理】错误规则引擎层增加 `setRuntimeErrorConfig()` / `getAllRateLimitMarkers()` 等可热替换 API，`ERROR_RULES` 改为原地可变数组，`isRateLimitErrorMarker` 改用动态 markers
+2. 【链路治理】消除 `errorConfig.js` 静态常量的直接绑定：`accountFallback.js` 用 getter、`auth.js` 用 getter、`routingGovernance.js` 用 getter
+3. 【链路治理】新增 `error-rules.json` 默认模板 + `errorRulesConfig.js` 加载器（本地覆盖 / 模板回退 / 保存写入）
+4. 【链路治理】新增 `GET/PUT /api/fork/error-rules` 和 `POST /api/fork/error-rules/reload` API
+5. 【链路治理】新增 `Dashboard /dashboard/error-rules` 管理页面：可视化增删改 rateLimitMarkers、errorRules、退避参数
+6. 【链路治理】`initializeApp.js` 启动时自动加载错误规则；`Sidebar.js` 新增"错误规则"入口
+
 
 # v0.5.35 (2026-07-16)
 

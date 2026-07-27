@@ -10,7 +10,7 @@ export const ERROR_TYPES = {
   500: { type: "server_error", code: "internal_server_error" },
   502: { type: "server_error", code: "bad_gateway" },
   503: { type: "server_error", code: "service_unavailable" },
-  504: { type: "server_error", code: "gateway_timeout" }
+  504: { type: "server_error", code: "gateway_timeout" },
 };
 
 // Default error messages per status code (client-facing)
@@ -25,14 +25,14 @@ export const DEFAULT_ERROR_MESSAGES = {
   500: "Internal server error",
   502: "Bad gateway - upstream provider error",
   503: "Service temporarily unavailable",
-  504: "Gateway timeout"
+  504: "Gateway timeout",
 };
 
 // Exponential backoff config for rate limits
 export const BACKOFF_CONFIG = {
   base: 2000,
   max: 5 * 60 * 1000,
-  maxLevel: 15
+  maxLevel: 15,
 };
 
 // Default cooldown for transient/unknown errors
@@ -40,6 +40,16 @@ export const TRANSIENT_COOLDOWN_MS = 30 * 1000;
 
 // Hard cap for provider-reported rate limit cooldown (e.g. codex resets_at can be 5-6h)
 export const MAX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000;
+
+// ---------------------------------------------------------------------------
+// Runtime-overridable markers, rules, and config
+// The app bootstrap (src/lib/fork/errorRulesConfig.js → boostrap) calls
+// setRuntimeErrorConfig() at startup and on reload. Consumers that need to
+// reflect live changes MUST use the getter functions below.
+// ---------------------------------------------------------------------------
+
+let _runtimeMarkers = null;
+let _runtimeRules = null;
 
 // Some OpenAI-compatible gateways return HTTP 400 while the structured error
 // correctly identifies a rate limit. Normalize these markers before fallback
@@ -52,8 +62,13 @@ export const RATE_LIMIT_ERROR_MARKERS = Object.freeze([
 ]);
 
 export function isRateLimitErrorMarker(value) {
-  return typeof value === "string"
-    && RATE_LIMIT_ERROR_MARKERS.includes(value.trim().toLowerCase());
+  const markers = _runtimeMarkers || RATE_LIMIT_ERROR_MARKERS;
+  return typeof value === "string" && markers.includes(value.trim().toLowerCase());
+}
+
+/** Returns the active rate-limit markers (runtime override or default). */
+export function getAllRateLimitMarkers() {
+  return _runtimeMarkers || RATE_LIMIT_ERROR_MARKERS;
 }
 
 // Cooldown durations (ms)
@@ -70,6 +85,9 @@ const COOLDOWN = {
  *   - status: HTTP status code match
  *   - cooldownMs: fixed cooldown duration
  *   - backoff: true = use exponential backoff (rate limit)
+ *
+ * The array is mutable so setRuntimeErrorConfig() can replace its contents.
+ * Consumers that hold a reference at import time see the live mutations.
  */
 export const ERROR_RULES = [
   // --- Text-based rules (checked first, order = priority) ---
@@ -98,3 +116,54 @@ export const COOLDOWN_MS = {
   transient: TRANSIENT_COOLDOWN_MS,
   requestNotAllowed: COOLDOWN.short,
 };
+
+/**
+ * Replace runtime error rules, markers, and config with values loaded from
+ * the local config file. Called by the app bootstrap at startup and on reload.
+ *
+ * @param {object} config - Parsed from error-rules.local.json
+ * @param {string[]} [config.rateLimitMarkers] - Override for rate-limit markers
+ * @param {object[]} [config.errorRules] - Override for ERROR_RULES array
+ * @param {object}  [config.backoffConfig] - Override for BACKOFF_CONFIG props
+ * @param {number}  [config.transientCooldownMs] - Override for TRANSIENT_COOLDOWN_MS
+ * @param {number}  [config.maxRateLimitCooldownMs] - Override for MAX_RATE_LIMIT_COOLDOWN_MS
+ */
+export function setRuntimeErrorConfig(config) {
+  if (!config) return;
+
+  if (Array.isArray(config.rateLimitMarkers) && config.rateLimitMarkers.length > 0) {
+    _runtimeMarkers = Object.freeze(
+      config.rateLimitMarkers.map((m) => m.trim().toLowerCase()).filter(Boolean),
+    );
+  }
+
+  if (Array.isArray(config.errorRules)) {
+    _runtimeRules = config.errorRules;
+    // Mutate the exported array in-place so existing import references see the new rules
+    ERROR_RULES.splice(0, ERROR_RULES.length, ...config.errorRules);
+  }
+
+  if (config.backoffConfig && typeof config.backoffConfig === "object") {
+    Object.assign(BACKOFF_CONFIG, config.backoffConfig);
+  }
+
+  if (typeof config.transientCooldownMs === "number") {
+    // Can't reassign a const, so expose via the exported COOLDOWN_MS object
+    COOLDOWN_MS.transient = config.transientCooldownMs;
+  }
+
+  if (typeof config.maxRateLimitCooldownMs === "number") {
+    // Similarly, expose via a property on the COOLDOWN_MS object
+    COOLDOWN_MS.maxRateLimit = config.maxRateLimitCooldownMs;
+  }
+}
+
+/** Get the active transient cooldown (runtime override or default). */
+export function getTransientCooldown() {
+  return COOLDOWN_MS.transient || TRANSIENT_COOLDOWN_MS;
+}
+
+/** Get the active max rate-limit cooldown (runtime override or default). */
+export function getMaxRateLimitCooldown() {
+  return COOLDOWN_MS.maxRateLimit || MAX_RATE_LIMIT_COOLDOWN_MS;
+}

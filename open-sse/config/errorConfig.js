@@ -42,9 +42,19 @@ export const TRANSIENT_COOLDOWN_MS = 30 * 1000;
 export const MAX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000;
 
 // Some OpenAI-compatible gateways return HTTP 400 while the structured error
-// correctly identifies a rate limit. Normalize this marker before fallback and
-// model-lock decisions so the request follows the 429 backoff path.
+// correctly identifies a rate limit. Normalize these markers before fallback
+// and model-lock decisions so the request follows the 429 backoff path.
+// Keep the singular export for compatibility with existing integrations.
 export const RATE_LIMIT_ERROR_MARKER = "rate_limit_exceeded";
+export const RATE_LIMIT_ERROR_MARKERS = Object.freeze([
+  RATE_LIMIT_ERROR_MARKER,
+  "rate_limit_error",
+]);
+
+export function isRateLimitErrorMarker(value) {
+  return typeof value === "string"
+    && RATE_LIMIT_ERROR_MARKERS.includes(value.trim().toLowerCase());
+}
 
 // Cooldown durations (ms)
 const COOLDOWN = {

@@ -19,8 +19,10 @@ describe("upstream rate-limit error normalization", () => {
   it.each([
     [{ error: { code: "rate_limit_exceeded" } }, 429],
     [{ error: { type: "rate_limit_exceeded" } }, 429],
+    [{ error: { code: "rate_limit_error" } }, 429],
+    [{ error: { type: "rate_limit_error" } }, 429],
     [{ error: { code: "invalid_request_error", type: "invalid_request_error" } }, 400],
-  ])("requires an exact structured rate-limit marker", (payload, expected) => {
+  ])("recognizes only configured structured rate-limit markers", (payload, expected) => {
     expect(errorUtils.normalizeUpstreamErrorStatus(400, JSON.stringify(payload))).toBe(expected);
   });
 

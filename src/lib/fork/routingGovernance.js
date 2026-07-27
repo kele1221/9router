@@ -1,4 +1,4 @@
-import { RATE_LIMIT_ERROR_MARKER } from "open-sse/config/errorConfig.js";
+import { RATE_LIMIT_ERROR_MARKERS } from "open-sse/config/errorConfig.js";
 
 function normalizeUrl(value) {
   const raw = String(value || "").replace(/\/+$/, "");
@@ -28,6 +28,15 @@ function publicProviderNode(node) {
     baseUrl: node.baseUrl || null,
   };
 }
+
+function configuredRateLimitMarkers(rule) {
+  const value = rule?.when?.errorCodeOrTypes ?? rule?.when?.errorCodeOrType;
+  const markers = Array.isArray(value) ? value : [value];
+  return new Set(markers
+    .filter((marker) => typeof marker === "string")
+    .map((marker) => marker.trim().toLowerCase()));
+}
+
 export function buildRoutingGovernanceStatus({
   config,
   providerNodes = [],
@@ -40,12 +49,13 @@ export function buildRoutingGovernanceStatus({
   const runtimeVerification = config.runtimeVerification;
   const actualNode = providerNodes.find((node) => node.id === providerHop?.providerNodeId) || null;
   const publicNode = publicProviderNode(actualNode);
-  const responseRule = config.responseRules.find((rule) => (
-    rule.when?.status === 400
-    && rule.when?.errorCodeOrType === RATE_LIMIT_ERROR_MARKER
-    && rule.then?.effectiveStatus === 429
-    && rule.then?.preserveBody === true
-  ));
+  const responseRule = config.responseRules.find((rule) => {
+    const markers = configuredRateLimitMarkers(rule);
+    return rule.when?.status === 400
+      && RATE_LIMIT_ERROR_MARKERS.every((marker) => markers.has(marker))
+      && rule.then?.effectiveStatus === 429
+      && rule.then?.preserveBody === true;
+  });
   const expectedClientBaseUrl = runtimeVerification
     ? joinUrl(proxyHop?.url, runtimeVerification.modelSwitchPathPrefix)
     : null;
@@ -70,9 +80,11 @@ export function buildRoutingGovernanceStatus({
     },
     {
       id: "response-normalization",
-      label: "400 rate_limit_exceeded → 429",
+      label: "400 结构化限流错误 → 429",
       status: responseRule ? "pass" : "fail",
-      detail: responseRule ? "响应体保持不变，并在模型锁定前归一化" : "规则缺失或不完整",
+      detail: responseRule
+        ? "rate_limit_exceeded / rate_limit_error；响应体保持不变，并在模型锁定前归一化"
+        : "规则缺失或不完整",
     },
     {
       id: "claude-cn-model-switch-route",

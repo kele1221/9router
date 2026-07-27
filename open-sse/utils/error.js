@@ -1,14 +1,15 @@
-import { ERROR_TYPES, DEFAULT_ERROR_MESSAGES, RATE_LIMIT_ERROR_MARKER } from "../config/errorConfig.js";
+import { ERROR_TYPES, DEFAULT_ERROR_MESSAGES, isRateLimitErrorMarker } from "../config/errorConfig.js";
 
 /**
  * Normalize known structured upstream errors without changing their payload.
- * Only an HTTP 400 explicitly marked as rate_limit_exceeded becomes 429.
+ * Only an HTTP 400 explicitly marked by a supported rate-limit code/type
+ * becomes 429. Ordinary 400 responses retain their original status.
  */
 export function normalizeUpstreamErrorStatus(statusCode, bodyText) {
   if (statusCode !== 400 || !bodyText) return statusCode;
   try {
     const error = JSON.parse(bodyText)?.error;
-    if (error?.code === RATE_LIMIT_ERROR_MARKER || error?.type === RATE_LIMIT_ERROR_MARKER) {
+    if (isRateLimitErrorMarker(error?.code) || isRateLimitErrorMarker(error?.type)) {
       return 429;
     }
   } catch { /* non-JSON upstream errors retain their original status */ }

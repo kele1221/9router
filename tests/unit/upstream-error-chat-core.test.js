@@ -94,6 +94,40 @@ describe("handleChatCore upstream error normalization", () => {
     );
   });
 
+  it("normalizes the Kimi rate_limit_error body before fallback and locking", async () => {
+    const bodyText = '{"error":{"message":"上游 kimi/kimi-k3 模型限流，请 65s 后再试","type":"rate_limit_error","param":null,"code":"rate_limit_error"}}';
+    executeMock.mockResolvedValue({
+      response: new Response(bodyText, {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+      url: "https://provider.example/v1/chat/completions",
+      headers: {},
+      transformedBody: null,
+    });
+
+    const result = await handleChatCore({
+      body: {
+        model: "kimi/kimi-k3",
+        stream: false,
+        messages: [{ role: "user", content: "hello" }],
+      },
+      modelInfo: { provider: "openai", model: "kimi/kimi-k3" },
+      credentials: { apiKey: "test-key", providerSpecificData: {} },
+      connectionId: "test-connection",
+      clientRawRequest: { endpoint: "/v1/chat/completions", body: {}, headers: {} },
+      log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), errorLine: vi.fn() },
+    });
+
+    expect(result.status).toBe(429);
+    expect(result.response.status).toBe(429);
+    expect(await result.response.text()).toBe(bodyText);
+    expect(recordNormalizationMock).toHaveBeenCalledWith(expect.objectContaining({
+      originalStatus: 400,
+      normalizedStatus: 429,
+    }));
+  });
+
   it("does not change the existing response-body behavior for ordinary 400 errors", async () => {
     const bodyText = '{"error":{"message":"bad input","type":"invalid_request_error","upstreamOnly":true}}';
     executeMock.mockResolvedValue({

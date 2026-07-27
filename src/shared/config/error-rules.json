@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "description": "错误规则配置 — 覆盖 ~/.9router/fork/error-rules.local.json 来定制",
+  "rateLimitMarkers": ["rate_limit_exceeded", "rate_limit_error"],
+  "backoffConfig": {
+    "base": 2000,
+    "max": 300000,
+    "maxLevel": 15
+  },
+  "transientCooldownMs": 30000,
+  "maxRateLimitCooldownMs": 1800000,
+  "errorRules": [
+    { "text": "no credentials",               "cooldownMs": 120000 },
+    { "text": "request not allowed",          "cooldownMs": 5000 },
+    { "text": "improperly formed request",    "cooldownMs": 120000 },
+    { "text": "rate limit",                   "backoff": true },
+    { "text": "too many requests",            "backoff": true },
+    { "text": "quota exceeded",               "backoff": true },
+    { "text": "capacity",                     "backoff": true },
+    { "text": "overloaded",                   "backoff": true },
+    { "status": 401,                          "cooldownMs": 120000 },
+    { "status": 402,                          "cooldownMs": 120000 },
+    { "status": 403,                          "cooldownMs": 120000 },
+    { "status": 404,                          "cooldownMs": 120000 },
+    { "status": 429,                          "backoff": true }
+  ]
+}

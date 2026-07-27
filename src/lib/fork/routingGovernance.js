@@ -1,4 +1,4 @@
-import { RATE_LIMIT_ERROR_MARKERS } from "open-sse/config/errorConfig.js";
+import { getAllRateLimitMarkers } from "open-sse/config/errorConfig.js";
 
 function normalizeUrl(value) {
   const raw = String(value || "").replace(/\/+$/, "");
@@ -52,7 +52,7 @@ export function buildRoutingGovernanceStatus({
   const responseRule = config.responseRules.find((rule) => {
     const markers = configuredRateLimitMarkers(rule);
     return rule.when?.status === 400
-      && RATE_LIMIT_ERROR_MARKERS.every((marker) => markers.has(marker))
+      && getAllRateLimitMarkers().every((marker) => markers.has(marker))
       && rule.then?.effectiveStatus === 429
       && rule.then?.preserveBody === true;
   });

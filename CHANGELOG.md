@@ -1,9 +1,14 @@
+## [2026-07-29 13:32:00]
+1. 【使用情况】所���成本显示从美���换为人民币（汇率 ×7.3）
+
+
 ## [2026-07-29 11:00:00]
-1. 【使用情况】顶部卡片增加 Cache Hit Rate 缓存命中率展示
+1. 【��用情况】顶部卡片���加 Cache Hit Rate 缓存命��率展示
 2. 【Dashboard】noAuth 供应商开关控制（settings API）
-3. 【Dashboard】限流通知增加"确认"关闭按钮
-4. 【Dashboard】用量统计过滤已禁用免费供应商
+3. 【Dashboard���限流通知增加"确���"关闭按钮
+4. 【Dashboard】���量统计过滤已禁用免费供应商
 5. 【Script】添加 restart.sh 本地重启脚本
+
 
 # v0.5.40 (2026-07-20)
 
@@ -32,7 +37,6 @@
 5. 【链路治理】新增 `Dashboard /dashboard/error-rules` 管理页面：可视化增删改 rateLimitMarkers、errorRules、退避参数
 6. 【链路治理】`initializeApp.js` 启动时自动加载错误规则；`Sidebar.js` 新增"错误规则"入口
 
-
 # v0.5.35 (2026-07-16)
 
 ## Features
@@ -56,10 +60,8 @@
 - **Models**: list compatible provider models in `/v1/models`
 - **Thinking**: send explicit `thinking:{type:adaptive}` alongside `output_config.effort`
 - **Translator**: strip `client_metadata` when converting openai-responses → openai
-
 ## Improvements
 - **Perf**: skip inactive background services on startup
-
 ## Docs
 - README: Persian YouTube tutorial
 
@@ -91,7 +93,6 @@
 - **Volcengine-ark**: clamp Kimi max_tokens to 32768 endpoint cap
 - **Antigravity**: align provider fingerprint with IDE Desktop 2.1.1 (#2389)
 - **Pricing**: update Claude/Codex model rates and add new models
-
 ## Improvements
 - **i18n(zh-CN)**: complete Chinese translations for all UI strings (#2436)
 - **API**: caching for tunnel and version status endpoints
@@ -257,7 +258,6 @@
 - **Usage views**: show edited connection names consistently across Providers & Quota Tracker
 - **Security**: hardened reverse-proxy local-access trust
 - **Security**: SSRF hardening on web fetch
-
 ## Internal
 - Large **open-sse / translator refactor** (~40 commits): unified provider/model registry (LiteLLM-style `models[]` + `kind` field, 100 co-located registry files), single-sourced media/OAuth/refresh/token URLs, registry-based dispatch for usage & token-refresh, DRY translator concerns (buildUsage, encodeDataUri, finishReasonMap, chunkBuilder, reasoningDelta…), ESM-safe registry init, large-file splits, dead-code removal, and golden/no-regression test gates
 
@@ -288,7 +288,6 @@
 - CommandCode: force `stream=true` in transformRequest (#1706)
 - Qoder: increase timeouts for reasoning models and improve stream handling
 - Dashboard: show provider node name instead of connection name in topology (#1770) + show explicit `kind="llm"` combos on combos page (#1684)
-
 ## Docs
 - README: add Indonesian 9Router tutorial video (#1709)
 
@@ -314,7 +313,6 @@
 - Qoder: allow `qmodel_latest` model key (#1638)
 - Providers: restore one-connection guard for compatible/embedding nodes
 - Model-test: route image/STT probes to their real endpoints, harden STT ping; add opencode-go + xiaomi-tokenplan to connection test (#1576, #1628)
-
 ## Improvements
 - Dashboard: reorganize menu actions across sidebar/header/profile
 - Translator: add data-driven coverage, bug-exposing cases, and real provider smoke tests
@@ -329,7 +327,6 @@
 - DeepSeek thinking mode: echo `reasoning_content` back on follow-up/tool-call turns so OpenCode-free and custom providers no longer 400 with "reasoning_content must be passed back" (#1543)
 - Reasoning injector: match deepseek/kimi model ids case-insensitively (covers custom providers using capitalized model names)
 - OpenCode suggested-models: include free models without the `-free` suffix, e.g. `big-pickle` (#1535)
-
 ## Improvements
 - Codex: trim sunset models, keep gpt-5.5 / gpt-5.4 / gpt-5.3-codex family, add gpt-5.4-mini
 - volcengine-ark: refresh model list (add DeepSeek-V4-Flash/Pro, drop EOL entries)
@@ -340,7 +337,6 @@
 ## Fixes
 - GitHub Copilot: never route Gemini/Claude models to the `/responses` endpoint; prevents misleading "does not support Responses API" 400s (#1062)
 - proxyFetch: restore missing `Readable` import causing runtime `ReferenceError` in DNS-bypass fetch path
-
 ## Improvements
 - Lower stream stall timeout from 60s → 35s for faster hang detection
 
@@ -360,7 +356,6 @@
 ## Features
 - Add Cloudflare Workers proxy deployer and pool integration (#1360)
 - Add Deno Deploy relays support and improved proxy pools dashboard layout (#1437)
-
 ## Improvements
 - Refactor Tunnel into dedicated Cloudflare and Tailscale manager modules
 - Refactor tokenRefresh service with in-flight dedup to prevent refresh_token_reused errors
@@ -395,7 +390,6 @@
 - Tunnel: cloudflared error messages now include log tail for easier debugging
 - Language switcher: applies selected locale immediately on close (#1234)
 - Antigravity OAuth: metadata now matches the official client
-
 ## Improvements
 - Gemini CLI: bump engine to 0.34.0
 - Re-hide `qwen` (OAuth EOL) and `iflow` (not ready) providers
@@ -427,7 +421,6 @@
 - Add Kiro provider support: full request/response translation, live model listing, reasoning content support
 - Add `buildOutput` RTK filter with autodetect for npm/yarn/cargo build logs
 - Add MITM warning notification in tray and dashboard
-
 ## Improvements
 - Add modalities (input/output) to model configuration for OpenCode
 - Fix tray hide-to-tray: keep current process alive instead of spawning detached child (fixes macOS NSStatusItem ghost icon)
@@ -440,6 +433,5 @@
 - Fix model check (test-models) blocked by dashboardGuard: pass machineId-based CLI token in internal self-calls
 
 # v0.4.46 (2026-05-15)
-
 ## Breaking Changes
 - Tunnel public URL changed — old tunnel links no longer work, please reconnect to get the new URL

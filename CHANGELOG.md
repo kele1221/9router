@@ -1,5 +1,9 @@
 ## [2026-07-29 11:00:00]
 1. 【使用情况】顶部卡片增加 Cache Hit Rate 缓存命中率展示
+2. 【Dashboard】noAuth 供应商开关控制（settings API）
+3. 【Dashboard】限流通知增加"确认"关闭按钮
+4. 【Dashboard】用量统计过滤已禁用免费供应商
+5. 【Script】添加 restart.sh 本地重启脚本
 
 # v0.5.40 (2026-07-20)
 

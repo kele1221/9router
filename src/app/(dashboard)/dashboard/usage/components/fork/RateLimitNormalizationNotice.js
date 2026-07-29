@@ -7,6 +7,7 @@ const POLL_INTERVAL_MS = 15000;
 
 export default function RateLimitNormalizationNotice() {
   const [summary, setSummary] = useState(null);
+  const [dismissedAt, setDismissedAt] = useState(() => localStorage.getItem("rate-limit-notice-dismissed-at"));
 
   useEffect(() => {
     let active = true;
@@ -31,6 +32,7 @@ export default function RateLimitNormalizationNotice() {
   }, []);
 
   if (!summary?.totalCount || !summary.lastEvent) return null;
+  if (dismissedAt && summary.lastEvent.occurredAt === dismissedAt) return null;
 
   const event = summary.lastEvent;
   const occurredAt = new Date(event.occurredAt);
@@ -70,6 +72,12 @@ export default function RateLimitNormalizationNotice() {
         <span className="shrink-0 self-start rounded-lg border border-success/20 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success sm:self-center">
           修正规则已生效
         </span>
+        <button
+          onClick={() => { localStorage.setItem("rate-limit-notice-dismissed-at", summary.lastEvent.occurredAt); setDismissedAt(summary.lastEvent.occurredAt); }}
+          className="shrink-0 self-start rounded-lg px-2 py-1.5 text-xs font-medium text-text-muted hover:bg-bg-hover hover:text-text-main transition-colors"
+        >
+          确认
+        </button>
       </div>
     </Card>
   );

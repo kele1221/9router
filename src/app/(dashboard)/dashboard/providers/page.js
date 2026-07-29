@@ -105,6 +105,7 @@ export default function ProvidersPage() {
     useState(false);
   const [testingMode, setTestingMode] = useState(null);
   const [testResults, setTestResults] = useState(null);
+  const [disabledFreeProviders, setDisabledFreeProviders] = useState([]);
   const notify = useNotificationStore();
   const searchQuery = useHeaderSearchStore((s) => s.query);
   const registerSearch = useHeaderSearchStore((s) => s.register);
@@ -157,6 +158,14 @@ export default function ProvidersPage() {
         if (connectionsRes.ok)
           setConnections(connectionsData.connections || []);
         if (nodesRes.ok) setProviderNodes(nodesData.nodes || []);
+        // Load disabled free providers list
+        try {
+          const settingsRes = await fetch("/api/settings");
+          if (settingsRes.ok) {
+            const settings = await settingsRes.json();
+            setDisabledFreeProviders(settings.disabledFreeProviders || []);
+          }
+        } catch {}
       } catch (error) {
         console.log("Error fetching data:", error);
       } finally {
@@ -254,6 +263,18 @@ export default function ProvidersPage() {
     } finally {
       setTestingMode(null);
     }
+  };
+
+  const handleToggleNoAuth = async (providerId, enable) => {
+    const next = enable
+      ? disabledFreeProviders.filter((id) => id !== providerId)
+      : [...disabledFreeProviders, providerId];
+    setDisabledFreeProviders(next);
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ disabledFreeProviders: next }),
+    });
   };
 
   const compatibleProviders = providerNodes
@@ -479,6 +500,8 @@ export default function ProvidersPage() {
                 provider={info}
                 stats={getProviderStats(key, freeAuthTypes)}
                 authType="free"
+                disabledFreeProviders={disabledFreeProviders}
+                onToggleNoAuth={(enable) => handleToggleNoAuth(key, enable)}
                 onToggle={(active) =>
                   handleToggleProvider(key, freeAuthTypes, active)
                 }
@@ -620,9 +643,10 @@ export default function ProvidersPage() {
   );
 }
 
-function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
+function ProviderCard({ providerId, provider, stats, authType, onToggle, disabledFreeProviders, onToggleNoAuth }) {
   const { connected, error, errorCode, errorTime, allDisabled } = stats;
   const isNoAuth = !!provider.noAuth;
+  const noAuthDisabled = isNoAuth && disabledFreeProviders?.includes(providerId);
 
   const dotColors = {
     free: "bg-green-500",
@@ -641,7 +665,7 @@ function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
     <Link href={`/dashboard/providers/${providerId}`} className="group min-w-0">
       <Card
         padding="xs"
-        className={`h-full hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors cursor-pointer ${allDisabled ? "opacity-50" : ""}`}
+        className={`h-full hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors cursor-pointer ${allDisabled || noAuthDisabled ? "opacity-50" : ""}`}
       >
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -665,7 +689,7 @@ function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
             <div className="min-w-0">
               <h3 className="truncate font-semibold">{provider.name}</h3>
               <div className="flex min-w-0 items-center gap-1.5 text-xs flex-wrap">
-                {allDisabled ? (
+                {allDisabled || noAuthDisabled ? (
                   <Badge variant="default" size="sm">
                     <span className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-[12px]">
@@ -688,20 +712,22 @@ function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {stats.total > 0 && (
+            {(stats.total > 0 || isNoAuth) && (
               <div
                 className="opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onToggle(!allDisabled ? false : true);
-                }}
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
               >
                 <Toggle
                   size="sm"
-                  checked={!allDisabled}
-                  onChange={() => {}}
-                  title={allDisabled ? "Enable provider" : "Disable provider"}
+                  checked={isNoAuth ? !noAuthDisabled : !allDisabled}
+                  onChange={(next) => {
+                    if (isNoAuth) {
+                      onToggleNoAuth(next);
+                    } else {
+                      onToggle(next);
+                    }
+                  }}
+                  title={isNoAuth ? (noAuthDisabled ? "Enable provider" : "Disable provider") : (allDisabled ? "Enable provider" : "Disable provider")}
                 />
               </div>
             )}

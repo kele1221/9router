@@ -88,3 +88,4 @@ graphify-out/*
 .codegraph/
 .PR/
 .next-analyze/*
+*.tgz

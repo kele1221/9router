@@ -7,7 +7,11 @@ const POLL_INTERVAL_MS = 15000;
 
 export default function RateLimitNormalizationNotice() {
   const [summary, setSummary] = useState(null);
-  const [dismissedAt, setDismissedAt] = useState(() => localStorage.getItem("rate-limit-notice-dismissed-at"));
+  const [dismissedAt, setDismissedAt] = useState(null);
+
+  useEffect(() => {
+    setDismissedAt(localStorage.getItem("rate-limit-notice-dismissed-at"));
+  }, []);
 
   useEffect(() => {
     let active = true;

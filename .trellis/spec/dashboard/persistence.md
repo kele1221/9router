@@ -55,6 +55,16 @@ Reference: `src/lib/db/migrations/001-initial.js`, `src/lib/db/migrations/index.
 - SQLite DB: `~/.9router/db.sqlite` (or `$DATA_DIR/db.sqlite`)
 - Usage logs: `~/.9router/usage.json` + `log.txt` (does NOT follow `DATA_DIR`)
 
+## Observability / request-logging gate
+
+`requestDetailsRepo.js` decides whether to persist request details via `getObservabilityConfig()`.
+
+- **Enabled flag**: `settings.enableObservability` (boolean). Default in `settingsRepo.js` is `false`.
+- Also honors `ENABLE_REQUEST_LOGS` env (explicit `"true"`); otherwise falls back to env `OBSERVABILITY_ENABLED !== "false"`.
+- Batch size / max records / max JSON size driven by `observability*` settings or their `OBSERVABILITY_*` env fallbacks (see `observabilityBatchSize` etc.).
+
+> **Warning (rename gotcha):** this flag was renamed upstream **`enableObservability2` → `enableObservability`** in v0.5.50. The old name no longer exists anywhere in `src/`. Any test / debug setup that sets `enableObservability2: true` will silently leave logging **disabled** (row never committed → `getRequestDetailById` returns null, `getDistinctProviders` misses providers). When upstream renames a settings key, run a repo-wide grep for the old name and sync fixtures — this cost 2 real regressions in the v0.5.50 merge (`tests/unit/request-details-tab.test.js`).
+
 ## Anti-patterns
 
 - Don't write raw SQL in route handlers — use repo functions

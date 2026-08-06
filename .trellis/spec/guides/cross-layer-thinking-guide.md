@@ -39,6 +39,7 @@ Client POST /v1/chat/completions
 - Regression baseline system in `tests/__baseline__/`
 - Run: `npx vitest run` from repo root after `npm install` + `cd tests && npm install`
 - Known fails documented in `tests/__baseline__/known-fails.txt`
+- **Judging merge regressions vs. pre-existing environment failures**: after an upstream merge, `verify-no-regression.mjs` flags failures not in `known-fails.txt` as regressions — but many are fork-inherent env failures (live provider calls, concurrency, source-assertion audits, proto deps). To tell them apart, run the *same failing files* against the pre-merge fork state: `git worktree add /tmp/baseline <pre-merge-commit>` (symlink `node_modules` + `tests/node_modules` from main), run the failing files, and diff the `(file, fullName)` failure sets. Cases failing on both = inherent (not regressions, no catalogue update needed); cases failing only post-merge = real regressions to fix or catalogue.
 
 ## API Format Pivot
 

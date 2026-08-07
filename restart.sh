@@ -22,4 +22,4 @@ fi
 
 echo "🚀 Starting 9Router fork on port $PORT..."
 cd "$DIR"
-PORT=$PORT HOSTNAME=0.0.0.0 npm run start
+PORT=$PORT HOSTNAME=0.0.0.0 npx next start --port $PORT

@@ -55,3 +55,15 @@ A translator registered on an exact `source:target` pair (e.g. `claude:kiro`) ru
 - Don't hardcode strings from `schema/` — import the constants
 - Don't forget to add the import to `index.js` — translators only work when imported
 - Don't add platform-specific instructions in translator files (platform logic lives in executors)
+## Passthrough system folding (v0.5.55 behavior change)
+
+`normalizeClaudePassthrough` no longer hoists mid-conversation `system` messages
+into `body.system`. Since v0.5.55 (`7e5f5a88`, cache-breakpoint re-anchor) they
+are **folded into the neighbouring user turn** (copy-on-write, original body
+never mutated):
+
+- Previous contract: `body.system` receives extra text blocks; `body.messages`
+  loses all `system`-role messages.
+- Current contract: `body.system` stays untouched; the system text is appended
+  as a text block to the previous user message (or a new user message if none).
+- Tests asserting the old hoist behavior must be updated to the fold contract.

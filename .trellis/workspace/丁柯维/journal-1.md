@@ -66,3 +66,42 @@ Upstream v0.5.50 renamed the observability gate setting `enableObservability2` �
 ### Status
 
 [OK] **Completed**
+
+---
+
+**Date**: 2026-08-14
+**Task**: Merge upstream v0.5.55 into product & close regression verdict
+**Package**: dashboard
+**Branch**: `product`
+
+### Summary
+
+Merged upstream v0.5.55 into `product`, deployed `9router` global as `0.5.55-k.12`. SAML SSO, Alibaba Token Plan, Fish Audio TTS, Gemini 3.7 Flash, security fixes (GHSA x-9r-real-ip, SSRF guard) included.
+
+### Conflicts resolved (3 files)
+
+1. `CHANGELOG.md` — kept fork Chinese entries at top + upstream v0.5.55 entry (mojibake preserved as-is).
+2. `cli/package.json` — upstream `version: 0.5.55` + fork fields (`forkVersion: 0.5.55-k.12`, `forkRepository`).
+3. `src/lib/db/repos/settingsRepo.js` — upstream SAML settings added, fork's `enableObservability: true` default kept (fork fix from v0.5.50).
+
+### Regression forensics
+
+Baseline worktree `c3555bcb` (clean merge base), same 20 failing files, diffed `(file, fullName)` sets: 86 baseline failures vs 88 post-merge; only **2 merge-only candidates**:
+- `golden-url-header.test.js` clinepass → inherent env issue (snapshot platform: upstream linux/node v24.15 vs local darwin; 4 sibling golden fails already baseline-inherent, not catalogued).
+- `translator-helpers-edge.test.js` system hoist → **real regression**: upstream `7e5f5a88` intentionally folds mid-conversation system messages into neighbouring user turn (copy-on-write), but did not update the test. Adapted test to the new fold contract (7/7 green).
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `881e48a5` | chore(fork): bump forkVersion k.12 + adapt passthrough system-fold regression from v0.5.55 |
+| `c3723d3e` | Merge remote-tracking branch 'upstream/master' into product (v0.5.55) |
+| `c3555bcb` | chore(fork): restart.sh background launch + usage overview in 千万 units |
+
+### Spec updates
+
+- `engine/translator-conventions.md`: documented passthrough system folding contract change (v0.5.55).
+
+### Status
+
+[OK] **Completed**

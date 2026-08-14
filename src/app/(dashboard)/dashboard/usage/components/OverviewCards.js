@@ -4,6 +4,7 @@ import PropTypes from "prop-types";
 import Card from "@/shared/components/Card";
 
 const fmt = (n) => new Intl.NumberFormat().format(n || 0);
+const fmtTenMillion = (n) => `${((n || 0) / 10_000_000).toFixed(2)} 千万`;
 const USD_RATE = 7.3;
 const fmtCost = (n) => `¥${((n || 0) * USD_RATE).toFixed(2)}`;
 
@@ -16,11 +17,11 @@ export default function OverviewCards({ stats }) {
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Total Input Tokens</span>
-        <span className="truncate text-2xl font-bold text-primary">{fmt(stats.totalPromptTokens)}</span>
+        <span className="truncate text-2xl font-bold text-primary">{fmtTenMillion(stats.totalPromptTokens)}</span>
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Cached Tokens</span>
-        <span className="truncate text-2xl font-bold text-info">{fmt(stats.totalCachedTokens)}</span>
+        <span className="truncate text-2xl font-bold text-info">{fmtTenMillion(stats.totalCachedTokens)}</span>
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">缓存命中率</span>
@@ -32,7 +33,7 @@ export default function OverviewCards({ stats }) {
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Output Tokens</span>
-        <span className="truncate text-2xl font-bold text-success">{fmt(stats.totalCompletionTokens)}</span>
+        <span className="truncate text-2xl font-bold text-success">{fmtTenMillion(stats.totalCompletionTokens)}</span>
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Est. Cost</span>

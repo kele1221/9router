@@ -36,9 +36,9 @@ export class OpenCodeExecutor extends BaseExecutor {
     this._currentSessionId = null;
   }
 
-  transformRequest(model, body, stream, credentials) {
+  transformRequest(model, body, stream, credentials, url, format = null) {
     this._currentSessionId = resolveOpencodeSession(body, credentials);
-    return injectReasoningContent({ provider: this.provider, model, body });
+    return injectReasoningContent({ provider: this.provider, model, body, format });
   }
 
   buildUrl(model) {

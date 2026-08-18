@@ -23,13 +23,13 @@ export default {
     headers: {},
     // Console Go thinking mode demands the assistant's reasoning echoed back
     // ("reasoning_text must be passed back"). Only OpenAI chat-completions
-    // requests carry these fields, and only tool-call turns need the echo.
-    // scope is deliberately "toolCalls" (NOT "all"): opencode-go also exposes
-    // /v1/messages (Claude body) and /v1/responses (Responses body) transports,
-    // which must stay untouched — a stray `reasoning_content` field or a
-    // `reasoning` content part 400s those endpoints.
+    // requests carry these fields. scope is "all" here but the injector is
+    // format-gated (see reasoningContentInjector): it only runs for the "openai"
+    // transport, so /v1/messages (Claude body) and /v1/responses (Responses
+    // body) are never touched — a stray `reasoning_content` field or a
+    // `reasoning` content part 400s those endpoints instead.
     reasoningInject: {
-      scope: "toolCalls",
+      scope: "all",
       fields: ["reasoning_content", "reasoning_text"],
     },
   },

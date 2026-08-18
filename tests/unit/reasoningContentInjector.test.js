@@ -168,7 +168,7 @@ describe("injectReasoningContent — opencode-go non-chat transports stay untouc
         { type: "message", role: "assistant", content: [{ type: "output_text", text: "hello" }] },
       ],
     };
-    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: responsesBody });
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: responsesBody, format: "openai-responses" });
     // Regression: a `reasoning` part 400s Console Go's /v1/responses deserializer
     // ("unknown variant `reasoning`, expected one of input_text/output_text/...")
     expect(out).toEqual(responsesBody);
@@ -179,19 +179,19 @@ describe("injectReasoningContent — opencode-go non-chat transports stay untouc
     }
   });
 
-  it("does NOT inject reasoning fields into Claude-style messages (no tool_calls)", () => {
+  it("does NOT inject reasoning fields into Claude-style messages when format=claude", () => {
     const claudeBody = {
       model: "deepseek-v4-flash",
       messages: [{ role: "assistant", content: [{ type: "text", text: "answer" }] }],
     };
-    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: claudeBody });
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: claudeBody, format: "claude" });
     expect(out.messages[0].reasoning_content).toBeUndefined();
     expect(out.messages[0].reasoning_text).toBeUndefined();
   });
 
-  it("echoes both reasoning fields on OpenAI-chat assistant tool-call turns", () => {
-    const openaiBody = bodyWith([{ role: "user", content: "hi" }, assistantWithToolCall]);
-    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: openaiBody });
+  it("echoes both reasoning fields on OpenAI-chat assistant turns (format=openai, scope all)", () => {
+    const openaiBody = bodyWith([{ role: "user", content: "hi" }, { role: "assistant", content: "answer without tool calls" }]);
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: openaiBody, format: "openai" });
     const assistant = out.messages.find((m) => m.role === "assistant");
     expect(assistant.reasoning_content).toBeDefined();
     expect(assistant.reasoning_text).toBeDefined();

@@ -107,10 +107,18 @@ function applyDeepSeekV4ProAlias({ provider, model, body }) {
   return nextBody;
 }
 
-export function injectReasoningContent({ provider, model, body }) {
+export function injectReasoningContent({ provider, model, body, format = null }) {
   const providerRule = providerRuleFor(provider);
   const modelRule = MODEL_RULES.find(r => r.match(model));
   const rule = providerRule || modelRule;
+
+  // Reasoning echo fields (reasoning_content / reasoning_text) are OpenAI
+  // chat-completions concepts. When the caller knows the upstream transport
+  // format, only run the rule for OpenAI chat — Claude (/v1/messages) and
+  // OpenAI Responses (/v1/responses) bodies must never get these fields or
+  // their reasoning content parts (Console Go rejects both with 400).
+  if (rule && format && format !== "openai") return body;
+
   const nextBody = applyDeepSeekV4ProAlias({ provider, model, body });
   return applyRule(nextBody, rule);
 }

@@ -1,5 +1,6 @@
 import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools } from "@/lib/localDb";
 import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
+import { getRotationManager } from "@/lib/network/proxyPoolManager";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { getMaxRateLimitCooldown } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
@@ -29,7 +30,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
   const excludeSet = excludeConnectionIds instanceof Set
     ? excludeConnectionIds
     : (excludeConnectionIds ? new Set([excludeConnectionIds]) : new Set());
-  const preferredConnectionId = options?.preferredConnectionId || null;
+  const preferredConnectionId = options?.preferredConnectionId || options?.rotation?.pinnedConnectionId || null;
   // Acquire mutex to prevent race conditions
   const currentMutex = selectionMutex;
   let resolveMutex;
@@ -50,7 +51,21 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       if (strategy !== "none") {
         const allPools = await getProxyPools({ isActive: true });
         const poolIds = allPools.filter(p => p.proxyUrl).map(p => p.id);
-        pickedId = pickProxyPoolId(poolIds, strategy, providerId);
+        if (settings?.proxyRotation?.enabled === true) {
+          const rotation = options?.rotation;
+          const pick = await getRotationManager().pickProxy({
+            poolIds,
+            excludeUrls: rotation?.proxyExcludes,
+            pinned: rotation?.pin,
+          });
+          pickedId = pick?.poolId ?? null;
+          if (pick?.proxyUrl) {
+            if (rotation) rotation.pin = pick.proxyUrl;
+            await getRotationManager().markProxyUsed(pick.proxyUrl);
+          }
+        } else {
+          pickedId = pickProxyPoolId(poolIds, strategy, providerId);
+        }
       }
       const resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId || "" });
       return {
@@ -172,7 +187,12 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       connection = availableConnections[0];
     }
 
-    const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {});
+    const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {}, { rotation: options?.rotation });
+    if (resolvedProxy.rotationUsed) {
+      try {
+        await getRotationManager().markProxyUsed(resolvedProxy.connectionProxyUrl);
+      } catch { /* recency tracking must never break credential selection */ }
+    }
 
     return {
       authType: connection.authType,

@@ -7,6 +7,7 @@ import {
   extractApiKey,
   isValidApiKey,
 } from "../services/auth.js";
+import { tryRotateProxy } from "@/lib/network/proxyRotation";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
@@ -221,12 +222,13 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
   // Try with available accounts (fallback on errors)
   const excludeConnectionIds = new Set();
+  const rotationCtx = { proxyExcludes: new Set(), rotationBudget: null, pinnedConnectionId: null };
   let lastError = null;
   let lastStatus = null;
   let lastErrorResponse = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { rotation: rotationCtx });
 
     // All accounts unavailable
     if (!credentials || credentials.allRateLimited) {
@@ -303,6 +305,14 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     });
 
     if (result.success) return result.response;
+
+    // Proxy rotation: same account, new IP — before any account lock.
+    const rot = await tryRotateProxy(rotationCtx, {
+      credentials: refreshedCredentials,
+      status: result.status,
+      error: result.error,
+    });
+    if (rot.rotated && rot.changed) continue;
 
     // Mark account unavailable (auto-calculates cooldown with exponential backoff, or precise resetsAtMs)
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, result.resetsAtMs);

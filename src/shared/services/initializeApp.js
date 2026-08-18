@@ -18,6 +18,7 @@ import {
 import { getMitmStatus, startMitm, loadEncryptedPassword, initDbHooks, restoreToolDNS, removeAllDNSEntriesSync } from "@/mitm/manager";
 import { syncToJson as syncMitmAliasCache } from "@/lib/mitmAliasCache";
 import { killAllBridges } from "@/lib/mcp/stdioSseBridge";
+import { getRotationManager } from "@/lib/network/proxyPoolManager";
 
 // Inject correct paths and DB hooks into manager.js (CJS) from ESM context
 (function bootstrapMitm() {
@@ -93,6 +94,23 @@ async function runHeavyStartup() {
 
   await cleanupProviderConnections();
   const settings = await getSettings();
+
+  // Proxy pool health probe (no-ops internally while rotation is disabled)
+  if (settings?.proxyRotation?.enabled) {
+    getRotationManager().startHealthProbe();
+    // Warm up Clash/mihomo controllers for active clash pools so node
+    // auto-switch + AI-Provider pool sync are live from boot (not just on the
+    // first failure). Fail-open: an unreachable controller logs and stays
+    // not-ready until the socket recovers.
+    try {
+      const { getProxyPools } = await import("@/lib/localDb");
+      const { getClashController } = await import("@/lib/network/clashController");
+      const clashPools = (await getProxyPools({ isActive: true })).filter((p) => p.type === "clash");
+      for (const pool of clashPools) getClashController(pool);
+    } catch (e) {
+      console.warn("[InitApp] Clash controller warmup failed:", e?.message);
+    }
+  }
 
   // Auto-resume tunnel (once per process)
   if (settings.tunnelEnabled && !g.tunnelAutoResumed) {

@@ -5,6 +5,7 @@ import {
   extractApiKey,
   isValidApiKey,
 } from "../services/auth.js";
+import { tryRotateProxy } from "@/lib/network/proxyRotation";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo } from "../services/model.js";
 import { handleVideoProxyCore, getVideoConfig, sanitizeSecrets } from "open-sse/handlers/videoCore.js";
@@ -113,11 +114,12 @@ export async function handleVideoCreate(request, action) {
   const idempotencyKey = request.headers.get("idempotency-key") || null;
 
   const excludeConnectionIds = new Set();
+  const rotationCtx = { proxyExcludes: new Set(), rotationBudget: null, pinnedConnectionId: null };
   let lastError = null;
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { preferredConnectionId });
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { preferredConnectionId, rotation: rotationCtx });
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
@@ -157,6 +159,13 @@ export async function handleVideoCreate(request, action) {
       log.info("VIDEO", `${provider.toUpperCase()} | ${action} accepted (connection ${credentials.connectionId})`);
       return withConnectionHeader(result.response, credentials.connectionId);
     }
+
+    const rot = await tryRotateProxy(rotationCtx, {
+      credentials: refreshedCredentials,
+      status: result.status,
+      error: result.error,
+    });
+    if (rot.rotated && rot.changed) continue;
 
     // Record the failure (dashboard shows lastError/errorCode → user sees re-auth is needed)
     const { shouldFallback } = await markAccountUnavailable(

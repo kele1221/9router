@@ -2,6 +2,7 @@ import {
   extractApiKey, isValidApiKey,
   getProviderCredentials, markAccountUnavailable,
 } from "../services/auth.js";
+import { tryRotateProxy } from "@/lib/network/proxyRotation";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleTtsCore } from "open-sse/handlers/ttsCore.js";
@@ -81,11 +82,12 @@ async function handleSingleModelTts(body, modelStr, responseFormat, language, st
 
   // Credentialed providers — fallback loop (same pattern as embeddings)
   const excludeConnectionIds = new Set();
+  const rotationCtx = { proxyExcludes: new Set(), rotationBudget: null, pinnedConnectionId: null };
   let lastError = null;
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { rotation: rotationCtx });
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
@@ -102,6 +104,13 @@ async function handleSingleModelTts(body, modelStr, responseFormat, language, st
     const result = await handleTtsCore({ provider, model, input: body.input, credentials, responseFormat, language, style });
 
     if (result.success) return result.response;
+
+    const rot = await tryRotateProxy(rotationCtx, {
+      credentials,
+      status: result.status,
+      error: result.error,
+    });
+    if (rot.rotated && rot.changed) continue;
 
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model);
     if (shouldFallback) {

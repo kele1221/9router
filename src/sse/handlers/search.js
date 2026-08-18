@@ -5,6 +5,7 @@ import {
   extractApiKey,
   isValidApiKey,
 } from "../services/auth.js";
+import { tryRotateProxy } from "@/lib/network/proxyRotation";
 import { getSettings, getCombos } from "@/lib/localDb";
 import { AI_PROVIDERS, resolveProviderId } from "@/shared/constants/providers.js";
 import { handleSearchCore } from "open-sse/handlers/search/index.js";
@@ -145,11 +146,12 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
 
   // Credential + fallback loop
   const excludeConnectionIds = new Set();
+  const rotationCtx = { proxyExcludes: new Set(), rotationBudget: null, pinnedConnectionId: null };
   let lastError = null;
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(providerId, excludeConnectionIds);
+    const credentials = await getProviderCredentials(providerId, excludeConnectionIds, null, { rotation: rotationCtx });
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
@@ -190,6 +192,13 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
     });
 
     if (result.success) return result.response;
+
+    const rot = await tryRotateProxy(rotationCtx, {
+      credentials: refreshedCredentials,
+      status: result.status,
+      error: result.error,
+    });
+    if (rot.rotated && rot.changed) continue;
 
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, providerId);
 

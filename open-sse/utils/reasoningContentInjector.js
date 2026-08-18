@@ -5,7 +5,9 @@
 // API." — opencode-go). Field name comes from registry transport.reasoningInject.fields.
 import { PROVIDERS } from "../config/providers.js";
 
-const PLACEHOLDER = " ";
+// Non-whitespace so upstream's trim-based "must be passed back" checks can't
+// mistake the echoed value for empty.
+const PLACEHOLDER = "\u2026";
 
 // Default echo fields for providers that only need the OpenAI-compatible field.
 const DEFAULT_FIELDS = ["reasoning_content"];

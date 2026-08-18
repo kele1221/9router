@@ -21,6 +21,17 @@ export default {
   transport: {
     baseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
     headers: {},
+    // Console Go thinking mode demands the assistant's reasoning echoed back
+    // ("reasoning_text must be passed back"). Only OpenAI chat-completions
+    // requests carry these fields, and only tool-call turns need the echo.
+    // scope is deliberately "toolCalls" (NOT "all"): opencode-go also exposes
+    // /v1/messages (Claude body) and /v1/responses (Responses body) transports,
+    // which must stay untouched — a stray `reasoning_content` field or a
+    // `reasoning` content part 400s those endpoints.
+    reasoningInject: {
+      scope: "toolCalls",
+      fields: ["reasoning_content", "reasoning_text"],
+    },
   },
   // Multi-endpoint: pick the transport matching the client sourceFormat to skip
   // translation. Guarded per-model by `supportedFormats` (see chatCore) because
@@ -33,6 +44,7 @@ export default {
   models: [
     { id: "glm-5.2", name: "GLM 5.2", supportedFormats: ["openai"] },
     { id: "glm-5.1", name: "GLM 5.1", supportedFormats: ["openai"] },
+    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", supportedFormats: ["openai-responses"] },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", supportedFormats: ["openai"] },
     { id: "kimi-k2.6", name: "Kimi K2.6", supportedFormats: ["openai"] },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", supportedFormats: ["openai", "claude", "openai-responses"] },

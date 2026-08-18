@@ -1,9 +1,14 @@
-// Some thinking-mode providers (DeepSeek, Kimi, MiniMax, ...) require reasoning_content
-// to be echoed back on assistant messages. Clients in OpenAI format don't send it,
-// so we inject a non-empty placeholder to satisfy upstream validation.
+// Some thinking-mode providers (DeepSeek, Kimi, MiniMax, Console Go, ...) require the
+// assistant's reasoning to be echoed back on follow-up requests. Clients in OpenAI
+// format don't send it, so we inject a non-empty placeholder to satisfy upstream
+// validation ("The `reasoning_text` in the thinking mode must be passed back to the
+// API." — opencode-go). Field name comes from registry transport.reasoningInject.fields.
 import { PROVIDERS } from "../config/providers.js";
 
 const PLACEHOLDER = " ";
+
+// Default echo fields for providers that only need the OpenAI-compatible field.
+const DEFAULT_FIELDS = ["reasoning_content"];
 
 // Provider-level rules derive from registry transport.reasoningInject (single source)
 const providerRuleFor = (provider) => PROVIDERS[provider]?.reasoningInject;
@@ -28,18 +33,53 @@ const DEEPSEEK_V4_PRO_ALIASES = {
 
 function shouldInject(message, scope) {
   if (message?.role !== "assistant") return false;
-  const rc = message.reasoning_content;
-  if (typeof rc === "string" && rc.length > 0) return false;
   if (scope === "toolCalls") return Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
   return true;
 }
 
+// Fill every declared echo field with the placeholder when it is empty/absent.
+// Returns a new message when anything changed, else null.
+function fillMissingFields(message, fields) {
+  let changed = false;
+  let next = message;
+  for (const field of fields) {
+    const value = next[field];
+    if (typeof value !== "string" || value.length === 0) {
+      next = { ...next, [field]: PLACEHOLDER };
+      changed = true;
+    }
+  }
+  return changed ? next : null;
+}
+
 function applyRule(body, rule) {
-  if (!rule || !body?.messages) return body;
-  const messages = body.messages.map(m =>
-    shouldInject(m, rule.scope) ? { ...m, reasoning_content: PLACEHOLDER } : m
-  );
-  return { ...body, messages };
+  if (!rule || (!body?.messages && !body?.input)) return body;
+  const fields = Array.isArray(rule.fields) && rule.fields.length ? rule.fields : DEFAULT_FIELDS;
+  let injected = 0;
+
+  if (Array.isArray(body.messages)) {
+    const messages = body.messages.map((message) => {
+      if (!shouldInject(message, rule.scope)) return message;
+      const next = fillMissingFields(message, fields);
+      if (next) {
+        injected += 1;
+        return next;
+      }
+      return message;
+    });
+    if (injected > 0) {
+      console.log(`[REASON-ECHO] filled ${injected} chat assistant msg(s) fields=${fields.join(",")}`);
+    }
+    return { ...body, messages };
+  }
+
+  // NOTE: Responses-shape requests ({input:[...]}, e.g. opencode-go /v1/responses)
+  // must NOT get a `reasoning` content part injected. The upstream deserializer
+  // rejects it outright ("unknown variant `reasoning`, expected one of
+  // `input_text`, `output_text`, `input_image`, `input_file`"). Reasoning is
+  // output-only there: echo it via chat-shape fields (reasoning_content/
+  // reasoning_text) or not at all.
+  return body;
 }
 
 function applyDeepSeekV4ProAlias({ provider, model, body }) {

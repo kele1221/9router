@@ -158,3 +158,42 @@ describe("OpenCodeExecutor — issue #1543 regression", () => {
     expect(assistant.reasoning_content).toBeDefined();
   });
 });
+
+describe("injectReasoningContent — opencode-go non-chat transports stay untouched", () => {
+  it("does NOT inject a `reasoning` content part into an openai-responses body", () => {
+    const responsesBody = {
+      model: "deepseek-v4-flash",
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "hello" }] },
+      ],
+    };
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: responsesBody });
+    // Regression: a `reasoning` part 400s Console Go's /v1/responses deserializer
+    // ("unknown variant `reasoning`, expected one of input_text/output_text/...")
+    expect(out).toEqual(responsesBody);
+    for (const item of out.input) {
+      for (const part of item.content || []) {
+        expect(part.type).not.toBe("reasoning");
+      }
+    }
+  });
+
+  it("does NOT inject reasoning fields into Claude-style messages (no tool_calls)", () => {
+    const claudeBody = {
+      model: "deepseek-v4-flash",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "answer" }] }],
+    };
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: claudeBody });
+    expect(out.messages[0].reasoning_content).toBeUndefined();
+    expect(out.messages[0].reasoning_text).toBeUndefined();
+  });
+
+  it("echoes both reasoning fields on OpenAI-chat assistant tool-call turns", () => {
+    const openaiBody = bodyWith([{ role: "user", content: "hi" }, assistantWithToolCall]);
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: openaiBody });
+    const assistant = out.messages.find((m) => m.role === "assistant");
+    expect(assistant.reasoning_content).toBeDefined();
+    expect(assistant.reasoning_text).toBeDefined();
+  });
+});

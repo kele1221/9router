@@ -4,7 +4,6 @@
 // validation ("The `reasoning_text` in the thinking mode must be passed back to the
 // API." — opencode-go). Field name comes from registry transport.reasoningInject.fields.
 import { PROVIDERS } from "../config/providers.js";
-import { RESPONSES_ITEM } from "../translator/schema/index.js";
 
 const PLACEHOLDER = " ";
 
@@ -41,7 +40,7 @@ function shouldInject(message, scope) {
 function isAssistantMessageItem(item) {
   return Boolean(
     item && typeof item === "object" &&
-    (item.type === RESPONSES_ITEM.MESSAGE || item.role) &&
+    (item.type === "message" || item.role) &&
     item.role === "assistant"
   );
 }
@@ -61,30 +60,28 @@ function fillMissingFields(message, fields) {
   return changed ? next : null;
 }
 
-// OpenAI Responses shape ({model, input:[...]}): Console Go's /v1/responses demands
-// the assistant's previous reasoning re-sent as a top-level `reasoning` ITEM
-// (a `reasoning` CONTENT part is rejected — "unknown variant `reasoning`"). Insert
-// a placeholder reasoning item right after each assistant message that doesn't
-// already have one following it.
-function injectResponsesReasoningItems(body) {
-  const input = [];
-  let inserted = 0;
-  for (let i = 0; i < body.input.length; i++) {
-    const item = body.input[i];
-    input.push(item);
-    if (!isAssistantMessageItem(item)) continue;
-    const next = body.input[i + 1];
-    if (next && next.type === RESPONSES_ITEM.REASONING) continue;
-    input.push({
-      type: RESPONSES_ITEM.REASONING,
-      summary: [{ type: "summary_text", text: PLACEHOLDER }],
-    });
-    inserted += 1;
+// OpenAI Responses shape ({model, input:[...]}): Console Go's /v1/responses
+// demands the assistant's previous reasoning echoed on the message item itself.
+// Live-proven rejections:
+//   - a `reasoning` CONTENT part  → "unknown variant `reasoning`"
+//   - a top-level `reasoning` ITEM → "The reasoning_text ... must be passed back"
+// What works (same as chat completions) is a `reasoning_text`/`reasoning_content`
+// field on the assistant message item. Fill those with a placeholder.
+function injectResponsesReasoningItems(body, fields) {
+  let injected = 0;
+  const input = body.input.map((item) => {
+    if (!isAssistantMessageItem(item)) return item;
+    const next = fillMissingFields(item, fields);
+    if (next) {
+      injected += 1;
+      return next;
+    }
+    return item;
+  });
+  if (injected > 0) {
+    console.log(`[REASON-ECHO] filled ${injected} responses assistant item(s) fields=${fields.join(",")}`);
   }
-  if (inserted > 0) {
-    console.log(`[REASON-ECHO] injected ${inserted} responses reasoning item(s)`);
-  }
-  return inserted > 0 ? { ...body, input } : body;
+  return injected > 0 ? { ...body, input } : body;
 }
 
 function applyRule(body, rule) {
@@ -93,7 +90,7 @@ function applyRule(body, rule) {
   let injected = 0;
 
   if (Array.isArray(body.input)) {
-    return injectResponsesReasoningItems(body);
+    return injectResponsesReasoningItems(body, fields);
   }
 
   if (Array.isArray(body.messages)) {

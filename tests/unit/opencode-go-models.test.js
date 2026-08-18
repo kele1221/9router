@@ -7,8 +7,11 @@ import { resolveTransport } from "../../open-sse/services/provider.js";
 const CHAT_ONLY = ["glm-5.2", "glm-5.1", "kimi-k2.7-code", "kimi-k2.6", "mimo-v2.5", "mimo-v2.5-pro"];
 // Models that also expose the Anthropic /messages endpoint
 const CLAUDE_CAPABLE = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus"];
-// Models that also expose the OpenAI /responses endpoint
-const RESPONSES_CAPABLE = ["deepseek-v4-pro", "deepseek-v4-flash"];
+// Models that expose OpenAI chat + Anthropic /messages (NOT /responses):
+// Console Go's /v1/responses demands real prior reasoning echoed back for
+// thinking-mode continuity, which 9router cannot provide — DeepSeek requests
+// from responses-format clients are translated to the chat transport instead.
+const DEEPSEEK_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"];
 // Models exposed only through the OpenAI /responses endpoint (official endpoint table)
 const RESPONSES_ONLY = ["gpt-5.6-luna"];
 
@@ -40,9 +43,9 @@ describe("OpenCode Go per-model supportedFormats", () => {
     }
   });
 
-  it("declares [openai, claude, openai-responses] for DeepSeek models", () => {
-    for (const m of RESPONSES_CAPABLE) {
-      expect(getModelSupportedFormats("opencode-go", m)).toEqual(["openai", "claude", "openai-responses"]);
+  it("declares [openai, claude] for DeepSeek models (responses dropped: continuity echo impossible)", () => {
+    for (const m of DEEPSEEK_MODELS) {
+      expect(getModelSupportedFormats("opencode-go", m)).toEqual(["openai", "claude"]);
     }
   });
 
@@ -91,9 +94,9 @@ describe("OpenCode Go per-model transport guard (chatCore logic)", () => {
     }
   });
 
-  it("routes DeepSeek + responses-format client to /responses", () => {
-    for (const m of RESPONSES_CAPABLE) {
-      expect(pickTransport("opencode-go", "openai-responses", "opencode-go", m)?.baseUrl).toBe("https://opencode.ai/zen/go/v1/responses");
+  it("does NOT route DeepSeek + responses-format client to /responses (falls back to chat transport)", () => {
+    for (const m of DEEPSEEK_MODELS) {
+      expect(pickTransport("opencode-go", "openai-responses", "opencode-go", m)).toBeNull();
     }
   });
 

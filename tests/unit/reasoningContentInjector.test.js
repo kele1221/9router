@@ -160,7 +160,7 @@ describe("OpenCodeExecutor — issue #1543 regression", () => {
 });
 
 describe("injectReasoningContent — opencode-go non-chat transports stay untouched", () => {
-  it("does NOT inject a `reasoning` content part into an openai-responses body", () => {
+  it("injects a top-level `reasoning` ITEM (never a content part) into an openai-responses body", () => {
     const responsesBody = {
       model: "deepseek-v4-flash",
       input: [
@@ -169,14 +169,21 @@ describe("injectReasoningContent — opencode-go non-chat transports stay untouc
       ],
     };
     const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: responsesBody, format: "openai-responses" });
-    // Regression: a `reasoning` part 400s Console Go's /v1/responses deserializer
-    // ("unknown variant `reasoning`, expected one of input_text/output_text/...")
-    expect(out).toEqual(responsesBody);
+    // Regression 1: a `reasoning` CONTENT PART 400s Console Go's /v1/responses
+    // deserializer ("unknown variant `reasoning`, expected one of input_text/...")
     for (const item of out.input) {
       for (const part of item.content || []) {
         expect(part.type).not.toBe("reasoning");
       }
     }
+    // Console Go instead wants the reasoning echoed as a top-level input ITEM.
+    const idx = out.input.findIndex((i) => i.type === "message" && i.role === "assistant");
+    expect(idx).toBeGreaterThan(-1);
+    expect(out.input[idx + 1]).toMatchObject({ type: "reasoning" });
+    expect(out.input[idx + 1].summary?.[0]?.type).toBe("summary_text");
+    // No duplicate on a second pass.
+    const again = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: out, format: "openai-responses" });
+    expect(again.input.filter((i) => i.type === "reasoning").length).toBe(1);
   });
 
   it("does NOT inject reasoning fields into Claude-style messages when format=claude", () => {
@@ -193,6 +200,9 @@ describe("injectReasoningContent — opencode-go non-chat transports stay untouc
     const openaiBody = bodyWith([{ role: "user", content: "hi" }, { role: "assistant", content: "answer without tool calls" }]);
     const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: openaiBody, format: "openai" });
     const assistant = out.messages.find((m) => m.role === "assistant");
+    // Regression: Console Go 400s chat requests that omit reasoning_text on
+    // ANY assistant turn ("The `reasoning_text` in the thinking mode must be
+    // passed back to the API.") — not just tool-call turns.
     expect(assistant.reasoning_content).toBeDefined();
     expect(assistant.reasoning_text).toBeDefined();
   });

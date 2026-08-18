@@ -4,6 +4,7 @@
 // validation ("The `reasoning_text` in the thinking mode must be passed back to the
 // API." — opencode-go). Field name comes from registry transport.reasoningInject.fields.
 import { PROVIDERS } from "../config/providers.js";
+import { RESPONSES_ITEM } from "../translator/schema/index.js";
 
 const PLACEHOLDER = " ";
 
@@ -37,6 +38,14 @@ function shouldInject(message, scope) {
   return true;
 }
 
+function isAssistantMessageItem(item) {
+  return Boolean(
+    item && typeof item === "object" &&
+    (item.type === RESPONSES_ITEM.MESSAGE || item.role) &&
+    item.role === "assistant"
+  );
+}
+
 // Fill every declared echo field with the placeholder when it is empty/absent.
 // Returns a new message when anything changed, else null.
 function fillMissingFields(message, fields) {
@@ -52,10 +61,40 @@ function fillMissingFields(message, fields) {
   return changed ? next : null;
 }
 
+// OpenAI Responses shape ({model, input:[...]}): Console Go's /v1/responses demands
+// the assistant's previous reasoning re-sent as a top-level `reasoning` ITEM
+// (a `reasoning` CONTENT part is rejected — "unknown variant `reasoning`"). Insert
+// a placeholder reasoning item right after each assistant message that doesn't
+// already have one following it.
+function injectResponsesReasoningItems(body) {
+  const input = [];
+  let inserted = 0;
+  for (let i = 0; i < body.input.length; i++) {
+    const item = body.input[i];
+    input.push(item);
+    if (!isAssistantMessageItem(item)) continue;
+    const next = body.input[i + 1];
+    if (next && next.type === RESPONSES_ITEM.REASONING) continue;
+    input.push({
+      type: RESPONSES_ITEM.REASONING,
+      summary: [{ type: "summary_text", text: PLACEHOLDER }],
+    });
+    inserted += 1;
+  }
+  if (inserted > 0) {
+    console.log(`[REASON-ECHO] injected ${inserted} responses reasoning item(s)`);
+  }
+  return inserted > 0 ? { ...body, input } : body;
+}
+
 function applyRule(body, rule) {
   if (!rule || (!body?.messages && !body?.input)) return body;
   const fields = Array.isArray(rule.fields) && rule.fields.length ? rule.fields : DEFAULT_FIELDS;
   let injected = 0;
+
+  if (Array.isArray(body.input)) {
+    return injectResponsesReasoningItems(body);
+  }
 
   if (Array.isArray(body.messages)) {
     const messages = body.messages.map((message) => {
@@ -73,12 +112,6 @@ function applyRule(body, rule) {
     return { ...body, messages };
   }
 
-  // NOTE: Responses-shape requests ({input:[...]}, e.g. opencode-go /v1/responses)
-  // must NOT get a `reasoning` content part injected. The upstream deserializer
-  // rejects it outright ("unknown variant `reasoning`, expected one of
-  // `input_text`, `output_text`, `input_image`, `input_file`"). Reasoning is
-  // output-only there: echo it via chat-shape fields (reasoning_content/
-  // reasoning_text) or not at all.
   return body;
 }
 
@@ -107,18 +140,22 @@ function applyDeepSeekV4ProAlias({ provider, model, body }) {
   return nextBody;
 }
 
+const NON_OPENAI_FORMATS = new Set(["claude", "openai-response", "gemini", "kiro", "cursor", "ollama", "commandcode", "vertex", "antigravity", "gemini-cli", "codex"]);
+
 export function injectReasoningContent({ provider, model, body, format = null }) {
   const providerRule = providerRuleFor(provider);
   const modelRule = MODEL_RULES.find(r => r.match(model));
   const rule = providerRule || modelRule;
 
-  // Reasoning echo fields (reasoning_content / reasoning_text) are OpenAI
-  // chat-completions concepts. When the caller knows the upstream transport
-  // format, only run the rule for OpenAI chat — Claude (/v1/messages) and
-  // OpenAI Responses (/v1/responses) bodies must never get these fields or
-  // their reasoning content parts (Console Go rejects both with 400).
-  if (rule && format && format !== "openai") return body;
-
   const nextBody = applyDeepSeekV4ProAlias({ provider, model, body });
+
+  // Reasoning echo is transport-specific:
+  // - openai (chat completions)   → fill reasoning_content/reasoning_text fields
+  // - openai-responses (/v1/responses) → insert top-level `reasoning` items
+  // - any other format (claude, gemini, ...) or unknown → never touched
+  // - no format hint (legacy callers) → chat-field behavior only
+  if (!rule) return nextBody;
+  if (format === "openai-responses") return applyRule(nextBody, rule);
+  if (format && NON_OPENAI_FORMATS.has(format)) return nextBody;
   return applyRule(nextBody, rule);
 }

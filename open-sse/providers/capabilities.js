@@ -398,23 +398,36 @@ export function getCapabilitiesForModel(provider, model) {
   const baseModel = model.includes("/") ? model.split("/").pop() : model;
 
   // 1. Provider-specific override
+  let caps = null;
   if (provider) {
     const providerCaps = PROVIDER_CAPABILITIES[provider];
-    if (providerCaps?.[model]) return { ...DEFAULT_CAPABILITIES, ...providerCaps[model] };
-    if (providerCaps?.[baseModel]) return { ...DEFAULT_CAPABILITIES, ...providerCaps[baseModel] };
+    if (providerCaps?.[model]) caps = providerCaps[model];
+    else if (providerCaps?.[baseModel]) caps = providerCaps[baseModel];
   }
 
   // 2. Canonical exact
-  if (MODEL_CAPABILITIES[baseModel]) return { ...DEFAULT_CAPABILITIES, ...MODEL_CAPABILITIES[baseModel] };
-  if (MODEL_CAPABILITIES[model]) return { ...DEFAULT_CAPABILITIES, ...MODEL_CAPABILITIES[model] };
+  if (!caps && MODEL_CAPABILITIES[baseModel]) caps = MODEL_CAPABILITIES[baseModel];
+  if (!caps && MODEL_CAPABILITIES[model]) caps = MODEL_CAPABILITIES[model];
 
   // 3. Pattern match (first match wins), refined by catalog + name heuristic
   for (const { pattern, caps } of PATTERN_CAPABILITIES) {
     if (matchPattern(pattern, baseModel) || matchPattern(pattern, model)) {
-      return refine(caps, provider, model);
+      const resolved = refine(caps, provider, model);
+      if (typeof provider === "string" && provider.startsWith("openai-compatible-")) {
+        resolved.thinkingFormat = "openai";
+      } else if (typeof provider === "string" && provider.startsWith("anthropic-compatible-")) {
+        resolved.thinkingFormat = "claude-budget";
+      }
+      return resolved;
     }
   }
 
   // 4. Floor
-  return refine(null, provider, model);
+  const fallback = refine(null, provider, model);
+  if (typeof provider === "string" && provider.startsWith("openai-compatible-")) {
+    fallback.thinkingFormat = "openai";
+  } else if (typeof provider === "string" && provider.startsWith("anthropic-compatible-")) {
+    fallback.thinkingFormat = "claude-budget";
+  }
+  return fallback;
 }

@@ -55,4 +55,20 @@ describe("getCapabilitiesForModel", () => {
     expect(getCapabilitiesForModel("kiro", "gpt-5.6-luna-agentic")).toMatchObject(kiroGpt56Expected);
     expect(getCapabilitiesForModel("kiro", "gpt-5.6-sol-thinking-agentic")).toMatchObject(kiroGpt56Expected);
   });
+
+  it("uses transport thinking format on custom compatible nodes instead of the model family format", () => {
+    // SenseNova regression: a deepseek model proxied through a custom
+    // openai-compatible node must not inherit DeepSeek's xhigh→max mapping.
+    expect(getCapabilitiesForModel("openai-compatible-chat-09f9a1a8", "deepseek-v4-flash"))
+      .toMatchObject({ reasoning: true, thinkingFormat: "openai" });
+    expect(getCapabilitiesForModel("openai-compatible-responses-abc", "deepseek-reasoner"))
+      .toMatchObject({ reasoning: true, thinkingFormat: "openai" });
+    expect(getCapabilitiesForModel("anthropic-compatible-abc", "deepseek-v4-flash"))
+      .toMatchObject({ reasoning: true, thinkingFormat: "claude-budget" });
+  });
+
+  it("keeps native deepseek thinking format on the official provider", () => {
+    expect(getCapabilitiesForModel("deepseek", "deepseek-v4-flash"))
+      .toMatchObject({ reasoning: true, thinkingFormat: "deepseek" });
+  });
 });

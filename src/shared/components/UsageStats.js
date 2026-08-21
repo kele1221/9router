@@ -40,7 +40,13 @@ function TimeAgo({ timestamp }) {
   return <>{timeAgo(timestamp)}</>;
 }
 
-function RecentRequests({ requests = [] }) {
+function RecentRequests({ requests = [], nodeNameMap = {} }) {
+  const getProviderName = (providerId) => {
+    if (!providerId) return "";
+    const p = AI_PROVIDERS[providerId];
+    return p?.name || nodeNameMap[providerId] || "";
+  };
+
   return (
     <Card className="flex min-w-0 flex-col overflow-hidden" padding="sm" style={{ height: 480 }}>
       {/* Header */}
@@ -62,14 +68,16 @@ function RecentRequests({ requests = [] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
-              {requests.map((r, i) => {
+              {(requests || []).map((r, i) => {
                 const ok = !r.status || r.status === "ok" || r.status === "success";
+                const providerName = r.providerName || getProviderName(r.provider);
+                const modelLabel = providerName ? `${providerName}-${r.model}` : r.model;
                 return (
                   <tr key={i} className="hover:bg-bg-subtle transition-colors">
                     <td className="py-1.5">
                       <span className={`block w-1.5 h-1.5 rounded-full ${ok ? "bg-success" : "bg-error"}`} />
                     </td>
-                    <td className="py-1.5 font-mono truncate max-w-[120px]" title={r.model}>{r.model}</td>
+                    <td className="py-1.5 font-mono truncate max-w-[120px]" title={modelLabel}>{modelLabel}</td>
                     <td className="py-1.5 text-right whitespace-nowrap">
                       <span className="text-primary">{fmt(r.promptTokens)}↑</span>
                       {" "}
@@ -214,6 +222,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
   const [tableView, setTableView] = useState("model");
   const [viewMode, setViewMode] = useState("costs");
   const [providers, setProviders] = useState([]);
+  const [nodeNameMap, setNodeNameMap] = useState({});
   const [periodLocal, setPeriodLocal] = useState("today");
   const isInitialLoad = useRef(true);
   const hasLoadedStats = useRef(false);
@@ -249,6 +258,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
           .filter((p) => p.noAuth && !seen.has(p.id) && isLLMProvider(p.id) && !(settings?.disabledFreeProviders || []).includes(p.id))
           .map((p) => ({ provider: p.id, name: p.name }));
         setProviders([...unique, ...noAuthProviders]);
+        setNodeNameMap(nodeNameMap);
       })
       .catch(() => {});
   }, []);
@@ -478,7 +488,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
             lastProvider={stats.recentRequests?.[0]?.provider || ""}
             errorProvider={stats.errorProvider || ""}
           />
-          <RecentRequests requests={stats.recentRequests || []} />
+          <RecentRequests requests={stats.recentRequests || []} nodeNameMap={nodeNameMap} />
         </div>
       )}
 

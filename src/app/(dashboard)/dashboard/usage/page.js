@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { UsageStats, RequestLogger, CardSkeleton, SegmentedControl } from "@/shared/components";
 import RequestDetailsTab from "./components/RequestDetailsTab";
 import RateLimitNormalizationNotice from "./components/fork/RateLimitNormalizationNotice";
@@ -24,7 +24,6 @@ export default function UsagePage() {
 
 function UsageContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   const [period, setPeriod] = useState("today");
 
@@ -37,7 +36,11 @@ function UsageContent() {
     if (value === activeTab) return;
     const params = new URLSearchParams(searchParams);
     params.set("tab", value);
-    router.push(`/dashboard/usage?${params.toString()}`, { scroll: false });
+    // Next 16.2 route cache returns a stale canonicalUrl for same-path
+    // search-param-only navigations after a hard load (vercel/next.js
+    // #91658/#92187, fixed in 16.3 via #94144), so router.push leaves the
+    // URL/tab stuck. The patched history API still syncs the router.
+    window.history.pushState({}, "", `/dashboard/usage?${params.toString()}`);
   };
 
   return (

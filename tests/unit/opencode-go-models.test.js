@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PROVIDER_MODELS, getModelSupportedFormats } from "../../open-sse/config/providerModels.js";
 import { PROVIDERS } from "../../open-sse/config/providers.js";
+import { PROVIDER_MEDIA } from "../../open-sse/providers/index.js";
 import { resolveTransport } from "../../open-sse/services/provider.js";
+import { FILTERS } from "../../src/app/api/providers/suggested-models/filters.js";
 
 // Chat-only models (no /messages, no /responses support on opencode-go)
 const CHAT_ONLY = ["glm-5.2", "glm-5.1", "kimi-k2.7-code", "kimi-k2.6", "mimo-v2.5", "mimo-v2.5-pro"];
@@ -63,6 +65,23 @@ describe("OpenCode Go per-model supportedFormats", () => {
 });
 
 describe("OpenCode Go multi-endpoint transports", () => {
+  it("declares a modelsFetcher for the public Go catalog", () => {
+    expect(PROVIDER_MEDIA["opencode-go"].modelsFetcher).toEqual({
+      url: "https://opencode.ai/zen/go/v1/models",
+      type: "opencode-go",
+    });
+  });
+
+  it("passes through every model from the Go catalog", () => {
+    expect(FILTERS["opencode-go"]([
+      { id: "glm-5.3" },
+      { id: "kimi-k3", name: "Kimi K3" },
+    ])).toEqual([
+      { id: "glm-5.3", name: "glm-5.3" },
+      { id: "kimi-k3", name: "Kimi K3" },
+    ]);
+  });
+
   it("declares openai / claude / openai-responses transports", () => {
     const formats = (PROVIDERS["opencode-go"].transports || []).map((t) => t.format);
     expect(formats).toEqual(["openai", "claude", "openai-responses"]);

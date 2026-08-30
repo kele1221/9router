@@ -18,6 +18,10 @@ export const FILTERS = {
       .filter((m) => m.id?.endsWith("-free") || KNOWN_FREE_OPENCODE_MODELS.includes(m.id))
       .map((m) => ({ id: m.id, name: m.id })),
 
+  // Paid Go subscription: every model on the Go catalog is usable.
+  "opencode-go": (models) =>
+    models.map((m) => ({ id: m.id, name: m.name || m.id })),
+
   // models.dev returns a large catalog; keep only mimo models
   "mimo-free": (models) =>
     (Array.isArray(models) ? models : [])

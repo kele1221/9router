@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FREE_PROVIDERS, AI_PROVIDERS } from "@/shared/constants/providers";
 
 // Keep providers without serviceKinds (default LLM) or with "llm" in serviceKinds
@@ -210,7 +210,6 @@ const PERIODS = [
 ];
 
 export default function UsageStats({ period: periodProp, setPeriod: setPeriodProp, hidePeriodSelector = false } = {}) {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const sortBy = searchParams.get("sortBy") || "rawModel";
@@ -325,8 +324,12 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       params.set("sortBy", field);
       params.set("sortOrder", "asc");
     }
-    router.replace(`?${params.toString()}`, { scroll: false });
-  }, [searchParams, router]);
+    // Next 16.2 route cache returns a stale canonicalUrl for same-path
+    // search-param-only navigations after a hard load, so router.replace
+    // leaves the URL/sort stuck. The patched history API still syncs the
+    // router, so sorting keeps working (see usage/page.js tab fix).
+    window.history.replaceState({}, "", `?${params.toString()}`);
+  }, [searchParams]);
 
   // Compute active table data
   const activeTableConfig = useMemo(() => {

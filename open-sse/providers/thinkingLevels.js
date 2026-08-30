@@ -51,5 +51,11 @@ export function getThinkingLevels(provider, model) {
   );
   let levels = hit?.levels || FORMAT_LEVELS[caps.thinkingFormat] || L.base;
   if (caps.thinkingCanDisable === false) levels = levels.filter((l) => l !== "none");
+  // Custom compatible gates advertise their own reasoning_effort enum; OpenAI's
+  // "minimal" is not widely accepted (observed: SenseNova accepts only
+  // low/medium/high/xhigh/none), so keep the picker to the common subset.
+  if (typeof provider === "string" && provider.startsWith("openai-compatible-")) {
+    levels = levels.filter((l) => l !== "minimal");
+  }
   return levels;
 }

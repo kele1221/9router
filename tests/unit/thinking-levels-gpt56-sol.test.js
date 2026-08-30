@@ -28,4 +28,15 @@ describe("getThinkingLevels", () => {
     const levels = getThinkingLevels("codex", "gpt-5.5");
     expect(levels || []).not.toContain("max");
   });
+
+  it("strips minimal for custom openai-compatible providers", () => {
+    const levels = getThinkingLevels("openai-compatible-chat-09f9a1a8", "deepseek-v4-flash");
+    expect(levels).toEqual(["none", "low", "medium", "high", "xhigh"]);
+    expect(levels).not.toContain("minimal");
+  });
+
+  it("keeps native deepseek levels on the official provider", () => {
+    const levels = getThinkingLevels("deepseek", "deepseek-v4-flash");
+    expect(levels).toEqual(["none", "high", "max"]);
+  });
 });

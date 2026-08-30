@@ -161,6 +161,31 @@ describe("applyThinking per provider format", () => {
     expect(out.thinking).toEqual({ type: "enabled" });
     expect(out.reasoning_effort).toBe("high");
   });
+  it("custom openai-compatible deepseek model keeps xhigh (SenseNova regression)", () => {
+    const out = apply("openai", "deepseek-v4-flash", { reasoning_effort: "xhigh" }, "openai-compatible-chat-09f9a1a8");
+    expect(out.reasoning_effort).toBe("xhigh");
+    expect(out.thinking).toBeUndefined();
+  });
+  it("official deepseek still maps xhigh → max", () => {
+    const out = apply("openai", "deepseek-v4-flash", { reasoning_effort: "xhigh" }, "deepseek");
+    expect(out.reasoning_effort).toBe("max");
+    expect(out.thinking).toEqual({ type: "enabled" });
+  });
+  it("custom openai-compatible auto → omits reasoning_effort (SenseNova rejects literal auto)", () => {
+    const out = apply("openai", "deepseek-v4-flash", { reasoning_effort: "auto" }, "openai-compatible-chat-09f9a1a8");
+    expect(out.reasoning_effort).toBeUndefined();
+    expect(out.thinking).toBeUndefined();
+  });
+  it("official deepseek auto → high (unchanged)", () => {
+    const out = apply("openai", "deepseek-v4-flash", { reasoning_effort: "auto" }, "deepseek");
+    expect(out.reasoning_effort).toBe("high");
+    expect(out.thinking).toEqual({ type: "enabled" });
+  });
+  it("custom anthropic-compatible deepseek model uses claude-budget thinking", () => {
+    const out = apply("openai", "deepseek-v4-flash", { reasoning_effort: "xhigh" }, "anthropic-compatible-abc");
+    expect(out.thinking).toMatchObject({ type: "enabled" });
+    expect(out.reasoning_effort).toBeUndefined();
+  });
   it("Kimi on → reasoning_effort", () => {
     const out = apply("openai", "kimi-k2.6", { reasoning_effort: "high" }, "kimi");
     expect(out.reasoning_effort).toBe("high");

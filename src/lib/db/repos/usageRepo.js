@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 import { getMeta, setMeta } from "../helpers/metaStore.js";
+import { AI_PROVIDERS } from "@/shared/constants/providers";
 
 function maskApiKey(key) {
   if (!key || typeof key !== "string") return null;
@@ -32,6 +33,21 @@ const pendingTimers = global._pendingTimers;
 const recentRing = global._recentRing;
 const connCache = global._connectionMapCache;
 const statsEmitTimers = global._statsEmitTimers;
+
+function resolveProviderName(providerId, nodeNameMap = {}) {
+  if (!providerId) return "";
+  return nodeNameMap[providerId] || AI_PROVIDERS[providerId]?.name || "";
+}
+
+async function getProviderNodeNameMap() {
+  const map = {};
+  try {
+    const { getProviderNodes } = await import("./nodesRepo.js");
+    const nodes = await getProviderNodes();
+    for (const n of nodes) if (n.id && n.name) map[n.id] = n.name;
+  } catch {}
+  return map;
+}
 
 export const statsEmitter = global._statsEmitter;
 
@@ -196,6 +212,7 @@ export function trackPendingRequest(model, provider, connectionId, started, erro
 export async function getActiveRequests() {
   const activeRequests = [];
   const connectionMap = await getConnectionMapCached();
+  const providerNodeNameMap = await getProviderNodeNameMap();
 
   for (const [connectionId, models] of Object.entries(pendingRequests.byAccount)) {
     for (const [modelKey, count] of Object.entries(models)) {
@@ -219,6 +236,7 @@ export async function getActiveRequests() {
       const t = e.tokens || {};
       return {
         timestamp: e.timestamp, model: e.model, provider: e.provider || "",
+        providerName: resolveProviderName(e.provider, providerNodeNameMap),
         promptTokens: t.prompt_tokens || t.input_tokens || 0,
         completionTokens: t.completion_tokens || t.output_tokens || 0,
         status: e.status || "ok",
@@ -376,6 +394,7 @@ export async function getUsageStats(period = "all") {
       const t = parseJson(r.tokens, {}) || {};
       return {
         timestamp: r.timestamp, model: r.model, provider: r.provider || "",
+        providerName: resolveProviderName(r.provider, providerNodeNameMap),
         promptTokens: t.prompt_tokens || t.input_tokens || 0,
         completionTokens: t.completion_tokens || t.output_tokens || 0,
         cachedTokens: t.cached_tokens || t.cache_read_input_tokens || 0,

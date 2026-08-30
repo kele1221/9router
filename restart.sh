@@ -12,13 +12,34 @@ npm run build
 
 echo "🔍 Checking port $PORT..."
 
-# Kill anything on the port
-PID=$(lsof -ti:$PORT 2>/dev/null || true)
-if [ -n "$PID" ]; then
-  echo "💀 Killing old process: $PID"
-  kill -9 $PID 2>/dev/null || true
+# Gracefully stop anything holding the port (children first, then parent),
+# and wait for full exit so the new instance never races a dying process
+# over the SQLite WAL.
+for pid in $(lsof -ti:$PORT 2>/dev/null || true); do
+  echo "💀 Stopping process tree: $pid"
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    kill -TERM "$child" 2>/dev/null || true
+  done
+  kill -TERM "$pid" 2>/dev/null || true
+done
+
+for i in $(seq 1 10); do
+  if ! lsof -ti:$PORT >/dev/null 2>&1; then
+    break
+  fi
   sleep 1
-fi
+done
+
+# Force-kill stragglers if graceful shutdown timed out
+for pid in $(lsof -ti:$PORT 2>/dev/null || true); do
+  echo "⚠️  Force-killing straggler: $pid"
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    kill -9 "$child" 2>/dev/null || true
+  done
+  kill -9 "$pid" 2>/dev/null || true
+done
+
+sleep 1
 
 # Double-check port is free
 if lsof -ti:$PORT >/dev/null 2>&1; then

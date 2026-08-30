@@ -1,6 +1,7 @@
 import { PROVIDER_MODELS, PROVIDER_ID_TO_ALIAS, getModelKind } from "@/shared/constants/models";
 import {
   AI_PROVIDERS,
+  FREE_PROVIDERS,
   getProviderAlias,
   isAnthropicCompatibleProvider,
   isOpenAICompatibleProvider,
@@ -290,6 +291,14 @@ export async function buildModelsList(kindFilter, options = {}) {
     }
   }
 
+  // No-auth free providers (e.g. OpenCode Free) have no connection row. Keep
+  // them in the list like the dashboard selector does — otherwise their
+  // custom/alias models vanish once any provider is connected.
+  const providerIds = new Set(activeConnectionByProvider.keys());
+  for (const [providerId, info] of Object.entries(FREE_PROVIDERS)) {
+    if (info.noAuth && !info.hidden) providerIds.add(providerId);
+  }
+
   const models = [];
 
   // Combos first (filtered by kind). Web combos expose `kind` so AI knows search vs fetch.
@@ -342,7 +351,8 @@ export async function buildModelsList(kindFilter, options = {}) {
       });
     }
   } else {
-    for (const [providerId, conn] of activeConnectionByProvider.entries()) {
+    for (const providerId of providerIds) {
+      const conn = activeConnectionByProvider.get(providerId);
       if (!providerMatchesKinds(providerId, kindFilter)) continue;
 
       const staticAlias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;

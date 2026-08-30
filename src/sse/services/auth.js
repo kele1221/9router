@@ -1,8 +1,10 @@
 import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools } from "@/lib/localDb";
 import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
+import { getRotationManager } from "@/lib/network/proxyPoolManager";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { getMaxRateLimitCooldown } from "open-sse/config/errorConfig.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
+import { getAntigravityQuotaCache } from "./antigravityQuota.js";
 import * as log from "../utils/logger.js";
 
 // Mutex to prevent race conditions during account selection
@@ -29,7 +31,7 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
   const excludeSet = excludeConnectionIds instanceof Set
     ? excludeConnectionIds
     : (excludeConnectionIds ? new Set([excludeConnectionIds]) : new Set());
-  const preferredConnectionId = options?.preferredConnectionId || null;
+  const preferredConnectionId = options?.preferredConnectionId || options?.rotation?.pinnedConnectionId || null;
   // Acquire mutex to prevent race conditions
   const currentMutex = selectionMutex;
   let resolveMutex;
@@ -50,7 +52,21 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       if (strategy !== "none") {
         const allPools = await getProxyPools({ isActive: true });
         const poolIds = allPools.filter(p => p.proxyUrl).map(p => p.id);
-        pickedId = pickProxyPoolId(poolIds, strategy, providerId);
+        if (settings?.proxyRotation?.enabled === true) {
+          const rotation = options?.rotation;
+          const pick = await getRotationManager().pickProxy({
+            poolIds,
+            excludeUrls: rotation?.proxyExcludes,
+            pinned: rotation?.pin,
+          });
+          pickedId = pick?.poolId ?? null;
+          if (pick?.proxyUrl) {
+            if (rotation) rotation.pin = pick.proxyUrl;
+            await getRotationManager().markProxyUsed(pick.proxyUrl);
+          }
+        } else {
+          pickedId = pickProxyPoolId(poolIds, strategy, providerId);
+        }
       }
       const resolvedProxy = await resolveConnectionProxyConfig({ proxyPoolId: pickedId || "" });
       return {
@@ -76,10 +92,23 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       return null;
     }
 
-    // Filter out model-locked and excluded connections
+    // Antigravity quota cache is lazy: only populated after that account returns 409/429.
+    const isAntigravity = providerId === "antigravity";
+    const antigravityQuotaCache = isAntigravity && model ? getAntigravityQuotaCache() : null;
+
+    // Filter out model-locked, excluded, and Antigravity quota-exhausted connections.
     const availableConnections = connections.filter(c => {
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
+      // Antigravity: skip if live quota exhausted for this model
+      if (isAntigravity && model && antigravityQuotaCache) {
+        const quota = antigravityQuotaCache.get(c.id)?.[model];
+        if (quota && quota.remainingPercentage <= 0 && quota.resetAt && new Date(quota.resetAt).getTime() > Date.now()) {
+          const account = c.id?.slice(0, 8) || "unknown";
+          log.info("AG_QUOTA", `${account} | CACHE_BLOCK ${model} — skip upstream until ${quota.resetAt}`);
+          return false;
+        }
+      }
       return true;
     });
 
@@ -94,9 +123,15 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
     });
 
     if (availableConnections.length === 0) {
-      // Find earliest lock expiry across all connections for retry timing
+      // Find earliest persistent lock or lazy Antigravity quota-cache reset for retry timing.
       const lockedConns = connections.filter(c => isModelLockActive(c, model));
       const expiries = lockedConns.map(c => getEarliestModelLockUntil(c)).filter(Boolean);
+      if (isAntigravity && model && antigravityQuotaCache) {
+        connections.forEach((c) => {
+          const resetAt = antigravityQuotaCache.get(c.id)?.[model]?.resetAt;
+          if (resetAt && new Date(resetAt).getTime() > Date.now()) expiries.push(resetAt);
+        });
+      }
       const earliest = expiries.sort()[0] || null;
       if (earliest) {
         const earliestConn = lockedConns[0];
@@ -172,7 +207,12 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       connection = availableConnections[0];
     }
 
-    const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {});
+    const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {}, { rotation: options?.rotation });
+    if (resolvedProxy.rotationUsed) {
+      try {
+        await getRotationManager().markProxyUsed(resolvedProxy.connectionProxyUrl);
+      } catch { /* recency tracking must never break credential selection */ }
+    }
 
     return {
       authType: connection.authType,
@@ -233,7 +273,10 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     newBackoffLevel = 0;
   } else if (resetsAtMs && resetsAtMs > Date.now()) {
     shouldFallback = true;
-    cooldownMs = Math.min(resetsAtMs - Date.now(), getMaxRateLimitCooldown());
+    // Antigravity quota API provides exact per-model resetAt. Do not truncate it.
+    cooldownMs = resolveProviderId(provider) === "antigravity"
+      ? resetsAtMs - Date.now()
+      : Math.min(resetsAtMs - Date.now(), getMaxRateLimitCooldown());
     newBackoffLevel = 0;
   } else {
     ({ shouldFallback, cooldownMs, newBackoffLevel } = checkFallbackError(status, errorText, backoffLevel));

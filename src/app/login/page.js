@@ -44,6 +44,15 @@ export default function LoginPage() {
             window.location.assign("/dashboard");
             return;
           }
+          if (data.localNoPassword) {
+            await fetch("/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ password: "" }),
+            });
+            window.location.assign("/dashboard");
+            return;
+          }
           setHasPassword(!!data.hasPassword);
           setAuthMode(data.authMode || "password");
           setSsoType(data.ssoType || "oidc");

@@ -50,6 +50,7 @@ export default function ProxyPoolsPage() {
   const [healthChecking, setHealthChecking] = useState(false);
   const [healthProgress, setHealthProgress] = useState({ current: 0, total: 0 });
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
   const relayMenuRef = useRef(null);
   const notify = useNotificationStore();
@@ -83,6 +84,24 @@ export default function ProxyPoolsPage() {
   useEffect(() => {
     fetchProxyPools();
   }, [fetchProxyPools]);
+
+  const handleAutoRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/proxy-pools/refresh", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        notify.success(`Auto refresh done: created ${data.created}, kept ${data.kept}, removed ${data.removed}`);
+      } else {
+        notify.error(data.error || "Auto refresh failed");
+      }
+    } catch (error) {
+      notify.error("Auto refresh failed");
+    } finally {
+      setRefreshing(false);
+      fetchProxyPools();
+    }
+  }, [notify, fetchProxyPools]);
 
   const resetForm = () => {
     setEditingProxyPool(null);
@@ -633,6 +652,15 @@ export default function ProxyPoolsPage() {
             Batch Import
           </Button>
           <Button size="sm" icon="add" onClick={openCreateModal}>Add Proxy Pool</Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={refreshing ? "progress_activity" : "autorenew"}
+            onClick={handleAutoRefresh}
+            disabled={refreshing || bulkBusy}
+          >
+            {refreshing ? "Refreshing…" : "Auto Refresh"}
+          </Button>
         </div>
       </div>
 

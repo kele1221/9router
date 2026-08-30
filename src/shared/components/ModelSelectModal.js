@@ -8,6 +8,7 @@ import CapacityBadges from "./CapacityBadges";
 import { useModelCaps } from "@/shared/hooks/useModelCaps";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, AI_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, getProviderAlias } from "@/shared/constants/providers";
+import { fetchSuggestedModels } from "@/shared/utils/providerModelsFetcher";
 
 // Provider order: OAuth first, then Free Tier, then API Key (matches dashboard/providers)
 const PROVIDER_ORDER = [
@@ -50,6 +51,7 @@ export default function ModelSelectModal({
   const [customModels, setCustomModels] = useState([]);
   const [disabledModels, setDisabledModels] = useState({});
   const [cursorModels, setCursorModels] = useState([]);
+  const [suggestedModels, setSuggestedModels] = useState({});
 
   // Cursor exposes the usable catalog per account. Keep the static catalog only
   // as a fallback, since it quickly becomes stale and different accounts can
@@ -158,6 +160,22 @@ export default function ModelSelectModal({
 
   const allProviders = useMemo(() => ({ ...OAUTH_PROVIDERS, ...FREE_PROVIDERS, ...FREE_TIER_PROVIDERS, ...APIKEY_PROVIDERS }), []);
 
+  // No-auth free providers expose their catalog via modelsFetcher (e.g. OpenCode
+  // Free). Fetch it so their models are selectable without manual registration.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let cancelled = false;
+    const fetchers = NO_AUTH_PROVIDER_IDS
+      .filter((id) => !allProviders[id]?.hidden && allProviders[id]?.modelsFetcher?.url)
+      .map((id) => ({ id, fetcher: allProviders[id].modelsFetcher }));
+    Promise.all(fetchers.map(async ({ id, fetcher }) => [id, await fetchSuggestedModels(fetcher)]))
+      .then((entries) => {
+        if (!cancelled) setSuggestedModels(Object.fromEntries(entries));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isOpen, allProviders]);
+
   // Group models by provider with priority order
   const groupedModels = useMemo(() => {
     const groups = {};
@@ -259,6 +277,12 @@ export default function ModelSelectModal({
             .map((m) => ({ id: m.id, name: m.name, value: `${alias}/${m.id}`, kind: getModelKind(m) }))
             .filter((m) => !seen.has(m.value));
           combined = [...registeredLlms, ...aliasModels.filter((m) => !registeredLlms.some((registered) => registered.value === m.value)), ...hardcoded];
+          // Live catalog (e.g. opencode-free) — usable passthrough without registration.
+          const suggested = (suggestedModels[providerId] || [])
+            .filter((m) => m?.id)
+            .map((m) => ({ id: m.id, name: m.name || m.id, value: `${alias}/${m.id}`, isSuggested: true }))
+            .filter((m) => !seen.has(m.value));
+          combined = [...combined, ...suggested];
         }
 
         if (combined.length > 0) {
@@ -394,7 +418,7 @@ export default function ModelSelectModal({
     });
 
     return groups;
-  }, [filteredActiveProviders, modelAliases, allProviders, providerNodes, customModels, disabledModels, kindFilter, activeProviders, cursorModels]);
+  }, [filteredActiveProviders, modelAliases, allProviders, providerNodes, customModels, disabledModels, kindFilter, activeProviders, cursorModels, suggestedModels]);
 
   // Filter combos by search query (and hide combos when kindFilter is set — combos are LLM-only by design)
   const filteredCombos = useMemo(() => {
@@ -583,6 +607,12 @@ export default function ModelSelectModal({
                         <>
                           {model.name}
                           <span className="text-[9px] opacity-60 font-normal">custom</span>
+                          <CapacityBadges caps={getCaps(model.value)} />
+                        </>
+                      ) : model.isSuggested ? (
+                        <>
+                          {model.name}
+                          <span className="text-[9px] font-bold text-green-500 bg-green-500/10 px-1 py-0.5 rounded">FREE</span>
                           <CapacityBadges caps={getCaps(model.value)} />
                         </>
                       ) : (

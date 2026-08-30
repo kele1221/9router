@@ -5,6 +5,7 @@ import {
   extractApiKey,
   isValidApiKey,
 } from "../services/auth.js";
+import { tryRotateProxy } from "@/lib/network/proxyRotation";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { handleImageGenerationCore } from "open-sse/handlers/imageGenerationCore.js";
@@ -87,11 +88,12 @@ async function handleSingleModelImage(body, modelStr, { wantsStream, binaryOutpu
 
   // Credentialed providers — fallback loop
   const excludeConnectionIds = new Set();
+  const rotationCtx = { proxyExcludes: new Set(), rotationBudget: null, pinnedConnectionId: null };
   let lastError = null;
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { preferredConnectionId });
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { preferredConnectionId, rotation: rotationCtx });
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
@@ -127,6 +129,13 @@ async function handleSingleModelImage(body, modelStr, { wantsStream, binaryOutpu
     });
 
     if (result.success) return result.response;
+
+    const rot = await tryRotateProxy(rotationCtx, {
+      credentials: refreshedCredentials,
+      status: result.status,
+      error: result.error,
+    });
+    if (rot.rotated && rot.changed) continue;
 
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model);
 

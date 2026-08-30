@@ -21,6 +21,17 @@ export default {
   transport: {
     baseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
     headers: {},
+    // Console Go thinking mode demands the assistant's reasoning echoed back
+    // ("reasoning_text must be passed back"). Only OpenAI chat-completions
+    // requests carry these fields. scope is "all" here but the injector is
+    // format-gated (see reasoningContentInjector): it only runs for the "openai"
+    // transport, so /v1/messages (Claude body) and /v1/responses (Responses
+    // body) are never touched — a stray `reasoning_content` field or a
+    // `reasoning` content part 400s those endpoints instead.
+    reasoningInject: {
+      scope: "all",
+      fields: ["reasoning_content", "reasoning_text"],
+    },
   },
   // Multi-endpoint: pick the transport matching the client sourceFormat to skip
   // translation. Guarded per-model by `supportedFormats` (see chatCore) because
@@ -31,12 +42,20 @@ export default {
     { format: "openai-responses", baseUrl: "https://opencode.ai/zen/go/v1/responses", auth: { combined: true, header: "Authorization", scheme: "bearer" } },
   ],
   models: [
+    { id: "glm-5.3-flash", name: "GLM 5.3 Flash (Vision)", supportedFormats: ["openai"] },
     { id: "glm-5.2", name: "GLM 5.2", supportedFormats: ["openai"] },
     { id: "glm-5.1", name: "GLM 5.1", supportedFormats: ["openai"] },
+    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", supportedFormats: ["openai-responses"] },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", supportedFormats: ["openai"] },
     { id: "kimi-k2.6", name: "Kimi K2.6", supportedFormats: ["openai"] },
-    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", supportedFormats: ["openai", "claude", "openai-responses"] },
-    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", supportedFormats: ["openai", "claude", "openai-responses"] },
+    // DeepSeek thinking models: NO openai-responses. Console Go's /v1/responses
+    // demands the REAL prior reasoning echoed back for thinking-mode continuity
+    // ("reasoning_text must be passed back") — a placeholder is rejected, and
+    // clients strip reasoning. Responses-format clients are translated to the
+    // chat transport instead, where a placeholder echo is accepted.
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", supportedFormats: ["openai", "claude"] },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", supportedFormats: ["openai", "claude"] },
+    { id: "deepseek-v4-flash-vision-exp", name: "DeepSeek V4 Flash Vision (Exp)", supportedFormats: ["openai", "claude"] },
     { id: "mimo-v2.5", name: "MiMo V2.5", supportedFormats: ["openai"] },
     { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", supportedFormats: ["openai"] },
     { id: "minimax-m3", name: "MiniMax M3", supportedFormats: ["openai", "claude"] },

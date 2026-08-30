@@ -28,7 +28,7 @@ fi
 
 mkdir -p "$(dirname "$LOG")"
 echo "🚀 Starting 9Router on port $PORT in background..."
-nohup env PORT=$PORT HOSTNAME=0.0.0.0 npx next start --port $PORT >>"$LOG" 2>&1 &
+nohup env PORT=$PORT HOSTNAME=0.0.0.0 node custom-server.js --port $PORT >>"$LOG" 2>&1 &
 
 sleep 2
 if lsof -ti:$PORT >/dev/null 2>&1; then

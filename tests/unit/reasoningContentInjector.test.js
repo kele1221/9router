@@ -158,3 +158,57 @@ describe("OpenCodeExecutor — issue #1543 regression", () => {
     expect(assistant.reasoning_content).toBeDefined();
   });
 });
+
+describe("injectReasoningContent — opencode-go non-chat transports stay untouched", () => {
+  it("echoes reasoning as fields on assistant message items in an openai-responses body", () => {
+    const responsesBody = {
+      model: "deepseek-v4-flash",
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "hello" }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "more" }] },
+      ],
+    };
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: responsesBody, format: "openai-responses" });
+    // Regression 1: a `reasoning` CONTENT PART 400s the deserializer
+    // ("unknown variant `reasoning`, expected one of input_text/...")
+    for (const item of out.input) {
+      for (const part of item.content || []) {
+        expect(part.type).not.toBe("reasoning");
+      }
+    }
+    // Regression 2: Console Go demands the echo on the assistant item itself
+    // ("The reasoning_text ... must be passed back"), same as chat completions.
+    const assistant = out.input.find((i) => i.type === "message" && i.role === "assistant");
+    expect(assistant.reasoning_text).toBeDefined();
+    expect(assistant.reasoning_content).toBeDefined();
+    // User items untouched, no synthetic reasoning ITEM inserted.
+    const user = out.input.find((i) => i.type === "message" && i.role === "user");
+    expect(user.reasoning_text).toBeUndefined();
+    expect(out.input.filter((i) => i.type === "reasoning").length).toBe(0);
+    // Idempotent: a second pass keeps a single echo.
+    const again = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: out, format: "openai-responses" });
+    expect(again.input).toEqual(out.input);
+  });
+
+  it("does NOT inject reasoning fields into Claude-style messages when format=claude", () => {
+    const claudeBody = {
+      model: "deepseek-v4-flash",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "answer" }] }],
+    };
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: claudeBody, format: "claude" });
+    expect(out.messages[0].reasoning_content).toBeUndefined();
+    expect(out.messages[0].reasoning_text).toBeUndefined();
+  });
+
+  it("echoes both reasoning fields on OpenAI-chat assistant turns (format=openai, scope all)", () => {
+    const openaiBody = bodyWith([{ role: "user", content: "hi" }, { role: "assistant", content: "answer without tool calls" }]);
+    const out = injectReasoningContent({ provider: "opencode-go", model: "deepseek-v4-flash", body: openaiBody, format: "openai" });
+    const assistant = out.messages.find((m) => m.role === "assistant");
+    // Regression: Console Go 400s chat requests that omit reasoning_text on
+    // ANY assistant turn ("The `reasoning_text` in the thinking mode must be
+    // passed back to the API.") — not just tool-call turns.
+    expect(assistant.reasoning_content).toBeDefined();
+    expect(assistant.reasoning_text).toBeDefined();
+  });
+});

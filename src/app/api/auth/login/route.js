@@ -37,6 +37,13 @@ export async function POST(request) {
       return NextResponse.json({ error: "Dashboard access via tunnel is disabled" }, { status: 403 });
     }
 
+    // Local machine (loopback) → no password needed
+    if (isLocalRequest(request)) {
+      const cookieStore = await cookies();
+      await setDashboardAuthCookie(cookieStore, request);
+      return NextResponse.json({ success: true, mustChangePassword: false }, { headers: NO_STORE_HEADERS });
+    }
+
     // Default password is '123456' if not set
     const storedHash = settings.password;
 

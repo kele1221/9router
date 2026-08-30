@@ -5,6 +5,7 @@ import {
   extractApiKey,
   isValidApiKey,
 } from "../services/auth.js";
+import { tryRotateProxy } from "@/lib/network/proxyRotation";
 import { getSettings, getCombos } from "@/lib/localDb";
 import { AI_PROVIDERS, resolveProviderId } from "@/shared/constants/providers.js";
 import { handleSearchCore } from "open-sse/handlers/search/index.js";
@@ -145,11 +146,37 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
 
   // Credential + fallback loop
   const excludeConnectionIds = new Set();
+  const rotationCtx = { proxyExcludes: new Set(), rotationBudget: null, pinnedConnectionId: null };
   let lastError = null;
   let lastStatus = null;
 
+  // Credential fallback: some search providers reuse the API key of a related
+  // chat provider (e.g. ollama-search reuses the `ollama` chat key, zai-search
+  // reuses the `glm` chat key). When the search provider has no own connection,
+  // fall back to the linked provider's credentials.
+  const fallbackProviderId = resolvedProvider.credentialFallback;
+
+  // Lock scope for this handler. Without it markAccountUnavailable would write
+  // an account-wide `__all` lock, which on the credentialFallback path takes
+  // the shared chat key (e.g. glm) offline for chat as well. Must be passed to
+  // getProviderCredentials too, so the lock is read back under the same key.
+  const searchLockKey = `websearch:${providerId}`;
+
   while (true) {
-    const credentials = await getProviderCredentials(providerId, excludeConnectionIds);
+    // Provider that actually owns the connection in use — differs from
+    // providerId once we fall back, and error locks must be attributed to it.
+    let credentialProviderId = providerId;
+    let credentials = await getProviderCredentials(providerId, excludeConnectionIds, searchLockKey, { rotation: rotationCtx });
+
+    // Fall back to the related chat provider's credentials when this search
+    // provider has none of its own (one key, chat + search).
+    if (!credentials && fallbackProviderId) {
+      credentials = await getProviderCredentials(fallbackProviderId, excludeConnectionIds, searchLockKey, { rotation: rotationCtx });
+      if (credentials) {
+        credentialProviderId = fallbackProviderId;
+        log.info("AUTH", `\x1b[32m${providerId} reusing ${fallbackProviderId} credentials\x1b[0m`);
+      }
+    }
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {
@@ -191,7 +218,14 @@ async function handleSingleProviderSearch(body, providerInput, request, apiKey, 
 
     if (result.success) return result.response;
 
-    const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, providerId);
+    const rot = await tryRotateProxy(rotationCtx, {
+      credentials: refreshedCredentials,
+      status: result.status,
+      error: result.error,
+    });
+    if (rot.rotated && rot.changed) continue;
+
+    const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, credentialProviderId, searchLockKey);
 
     if (shouldFallback) {
       log.warn("AUTH", `Account ${credentials.connectionName} unavailable (${result.status}), trying fallback`);

@@ -1,4 +1,6 @@
 import { getProxyPoolById } from "@/models";
+import { getSettings } from "@/lib/localDb";
+import { getRotationManager } from "./proxyPoolManager.js";
 
 // Safely normalize any value into a trimmed string.
 function normalizeString(value) {
@@ -64,7 +66,8 @@ function normalizeLegacyProxy(providerSpecificData = {}) {
  * 3. No Proxy
  */
 export async function resolveConnectionProxyConfig(
-  providerSpecificData = {}
+  providerSpecificData = {},
+  options = {}
 ) {
   try {
     const proxyPoolIdRaw = normalizeString(
@@ -116,8 +119,70 @@ export async function resolveConnectionProxyConfig(
         }
 
         /**
+         * Clash/Mihomo pool: all traffic goes through the local controller's
+         * mixed port; the controller owns node selection. strictProxy defaults
+         * to true so a dead controller fails the request instead of leaking
+         * the real egress IP through the direct fallback.
+         */
+        if (proxyPool.type === "clash") {
+          const mixedPort = proxyPool.clash?.mixedPort || proxyPool.mixedPort || 7890;
+          return {
+            source: "clash",
+
+            proxyPoolId,
+            proxyPool,
+
+            connectionProxyEnabled: true,
+            connectionProxyUrl: `socks5://127.0.0.1:${mixedPort}`,
+            connectionNoProxy: noProxy,
+
+            strictProxy: true,
+          };
+        }
+
+        /**
          * Standard proxy pool
          */
+        const wantsRotation =
+          proxyPool.rotationEnabled === true ||
+          Boolean(proxyPool.groupId) ||
+          (Array.isArray(providerSpecificData.proxyPoolIds) &&
+            providerSpecificData.proxyPoolIds.length > 1);
+
+        if (wantsRotation && options?.rotation) {
+          try {
+            const settings = await getSettings();
+            if (settings?.proxyRotation?.enabled === true) {
+              const manager = getRotationManager();
+              const pick = await manager.pickProxy({
+                poolIds: [proxyPoolId],
+                excludeUrls: options.rotation.proxyExcludes,
+                pinned: options.rotation.pin,
+              });
+              if (pick?.proxyUrl) {
+                return {
+                  source: "pool",
+
+                  proxyPoolId: pick.poolId,
+                  proxyPool: null,
+
+                  connectionProxyEnabled: true,
+                  connectionProxyUrl: pick.proxyUrl,
+                  connectionNoProxy: noProxy,
+
+                  strictProxy: proxyPool.strictProxy === true,
+                  rotationUsed: true,
+                };
+              }
+            }
+          } catch (error) {
+            console.warn(
+              "[resolveConnectionProxyConfig] Rotation pick failed, falling back to bound pool:",
+              error?.message
+            );
+          }
+        }
+
         return {
           source: "pool",
 

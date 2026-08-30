@@ -67,7 +67,7 @@ export class DefaultExecutor extends BaseExecutor {
     super(provider, PROVIDERS[provider] || PROVIDERS.openai);
   }
 
-  transformRequest(model, body) {
+  transformRequest(model, body, stream, credentials, url, format = null) {
     const transformed = this.applyJsonSchemaFallback(body);
 
     if (transformed && typeof transformed === "object") {
@@ -78,7 +78,7 @@ export class DefaultExecutor extends BaseExecutor {
       stripUnsupportedParams(this.provider, model, transformed);
     }
 
-    return injectReasoningContent({ provider: this.provider, model, body: transformed });
+    return injectReasoningContent({ provider: this.provider, model, body: transformed, format });
   }
 
   // Fallback json_schema → json_object for openai-compatible providers without native Structured Output.

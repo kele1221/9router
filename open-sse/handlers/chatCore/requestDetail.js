@@ -94,7 +94,7 @@ export function formatDoneLine({ usage, latency }) {
   return `DONE ${latency?.total ?? 0}ms${ttftStr} · ${inStr} · OUT ${outTok}`;
 }
 
-export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false }) {
+export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, rtkStats, label = "USAGE", silent = false }) {
   if (!tokens || typeof tokens !== "object") return;
 
   const inTokens = tokens.input_tokens ?? tokens.prompt_tokens ?? 0;
@@ -114,6 +114,13 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     prompt_tokens: tokens.prompt_tokens ?? tokens.input_tokens ?? 0,
     completion_tokens: tokens.completion_tokens ?? tokens.output_tokens ?? 0
   };
+  const savedChars = Math.max(0, Number(rtkStats?.bytesBefore || 0) - Number(rtkStats?.bytesAfter || 0));
+  if (savedChars > 0) {
+    normalized.rtk_saved_chars = savedChars;
+    normalized.rtk_before_chars = Number(rtkStats.bytesBefore) || 0;
+    normalized.rtk_after_chars = Number(rtkStats.bytesAfter) || 0;
+    normalized.rtk_saved_tokens_est = Math.round(savedChars / 4);
+  }
 
   saveRequestUsage({
     provider: provider || "unknown",

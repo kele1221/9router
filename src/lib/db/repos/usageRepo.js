@@ -72,6 +72,10 @@ function addToCounter(target, key, values) {
   target[key].promptTokens += values.promptTokens || 0;
   target[key].completionTokens += values.completionTokens || 0;
   target[key].cachedTokens += values.cachedTokens || 0;
+  target[key].estimatedSavedTokens = (target[key].estimatedSavedTokens || 0) + (values.estimatedSavedTokens || 0);
+  target[key].rtkSavedChars = (target[key].rtkSavedChars || 0) + (values.rtkSavedChars || 0);
+  target[key].rtkBeforeChars = (target[key].rtkBeforeChars || 0) + (values.rtkBeforeChars || 0);
+  target[key].rtkAfterChars = (target[key].rtkAfterChars || 0) + (values.rtkAfterChars || 0);
   target[key].cost += values.cost || 0;
   if (values.meta) Object.assign(target[key], values.meta);
 }
@@ -81,12 +85,20 @@ function aggregateEntryToDay(day, entry) {
   const completionTokens = entry.tokens?.completion_tokens || entry.tokens?.output_tokens || 0;
   const cachedTokens = entry.tokens?.cached_tokens || entry.tokens?.cache_read_input_tokens || 0;
   const cost = entry.cost || 0;
-  const vals = { promptTokens, completionTokens, cachedTokens, cost };
+  const estimatedSavedTokens = entry.tokens?.rtk_saved_tokens_est || 0;
+  const rtkSavedChars = entry.tokens?.rtk_saved_chars || 0;
+  const rtkBeforeChars = entry.tokens?.rtk_before_chars || 0;
+  const rtkAfterChars = entry.tokens?.rtk_after_chars || 0;
+  const vals = { promptTokens, completionTokens, cachedTokens, cost, estimatedSavedTokens, rtkSavedChars, rtkBeforeChars, rtkAfterChars };
 
   day.requests = (day.requests || 0) + 1;
   day.promptTokens = (day.promptTokens || 0) + promptTokens;
   day.completionTokens = (day.completionTokens || 0) + completionTokens;
   day.cachedTokens = (day.cachedTokens || 0) + cachedTokens;
+  day.estimatedSavedTokens = (day.estimatedSavedTokens || 0) + estimatedSavedTokens;
+  day.rtkSavedChars = (day.rtkSavedChars || 0) + rtkSavedChars;
+  day.rtkBeforeChars = (day.rtkBeforeChars || 0) + rtkBeforeChars;
+  day.rtkAfterChars = (day.rtkAfterChars || 0) + rtkAfterChars;
   day.cost = (day.cost || 0) + cost;
 
   day.byProvider ||= {};
@@ -413,7 +425,8 @@ export async function getUsageStats(period = "all") {
 
   const stats = {
     totalRequests: 0,
-    totalPromptTokens: 0, totalCompletionTokens: 0, totalCachedTokens: 0, totalCost: 0,
+    totalPromptTokens: 0, totalCompletionTokens: 0, totalCachedTokens: 0,
+    totalEstimatedSavedTokens: 0, totalRtkSavedChars: 0, totalRtkBeforeChars: 0, totalRtkAfterChars: 0, totalCost: 0,
     byProvider: {}, byModel: {}, byAccount: {}, byApiKey: {}, byEndpoint: {},
     last10Minutes: [],
     pending: pendingRequests,
@@ -475,6 +488,10 @@ export async function getUsageStats(period = "all") {
       stats.totalPromptTokens += day.promptTokens || 0;
       stats.totalCompletionTokens += day.completionTokens || 0;
       stats.totalCachedTokens += day.cachedTokens || 0;
+      stats.totalEstimatedSavedTokens += day.estimatedSavedTokens || 0;
+      stats.totalRtkSavedChars += day.rtkSavedChars || 0;
+      stats.totalRtkBeforeChars += day.rtkBeforeChars || 0;
+      stats.totalRtkAfterChars += day.rtkAfterChars || 0;
       stats.totalCost += day.cost || 0;
 
       for (const [prov, p] of Object.entries(day.byProvider || {})) {
@@ -608,6 +625,10 @@ export async function getUsageStats(period = "all") {
       stats.totalPromptTokens += promptTokens;
       stats.totalCompletionTokens += completionTokens;
       stats.totalCachedTokens += cachedTokens;
+      stats.totalEstimatedSavedTokens += tokens.rtk_saved_tokens_est || 0;
+      stats.totalRtkSavedChars += tokens.rtk_saved_chars || 0;
+      stats.totalRtkBeforeChars += tokens.rtk_before_chars || 0;
+      stats.totalRtkAfterChars += tokens.rtk_after_chars || 0;
       stats.totalCost += entryCost;
 
       if (!stats.byProvider[r.provider]) stats.byProvider[r.provider] = { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0 };
@@ -726,6 +747,25 @@ export async function getChartData(period = "7d") {
       buckets[idx].cost += r.cost || 0;
     }
     return buckets;
+  }
+
+  if (period === "all") {
+    const dayRows = loadDaysInRange(db, null);
+    const monthMap = new Map();
+    for (const row of dayRows) {
+      const month = String(row.dateKey || "").slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(month)) continue;
+      const day = parseJson(row.data, {});
+      const bucket = monthMap.get(month) || { tokens: 0, cost: 0 };
+      bucket.tokens += (day.promptTokens || 0) + (day.completionTokens || 0);
+      bucket.cost += day.cost || 0;
+      monthMap.set(month, bucket);
+    }
+    return [...monthMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, data]) => ({
+      label: new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short" }).format(new Date(`${month}-01T00:00:00`)),
+      tokens: data.tokens,
+      cost: data.cost,
+    }));
   }
 
   const bucketCount = period === "7d" ? 7 : period === "30d" ? 30 : 60;

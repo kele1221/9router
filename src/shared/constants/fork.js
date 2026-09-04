@@ -7,6 +7,6 @@ export const FORK_CONFIG = {
   upstreamOwner: "decolua",
   upstreamRepo: "9router",
   upstreamBranch: "master",
-  version: "0.5.59-k.13",
+  version: "0.5.65-k.14",
   repositoryUrl: "https://github.com/kele1221/9router",
 };

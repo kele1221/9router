@@ -89,3 +89,6 @@ graphify-out/*
 .PR/
 .next-analyze/*
 *.tgz
+
+# Kiro local workspace state
+.kiro/

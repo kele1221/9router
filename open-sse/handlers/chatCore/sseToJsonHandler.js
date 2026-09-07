@@ -189,7 +189,8 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
   const ctx = {
     provider, model, connectionId,
     request: extractRequestConfig(body, stream),
-    providerRequest: finalBody || translatedBody || null
+    providerRequest: finalBody || translatedBody || null,
+    rtk: rtkStats || undefined,
   };
 
   // Codex/Responses API SSE path

@@ -76,6 +76,7 @@ export function buildRequestDetail(base, overrides = {}) {
     providerRequest: base.providerRequest || null,
     providerResponse: base.providerResponse || null,
     response: base.response || {},
+    rtk: base.rtk || base.rtkStats || undefined,
     pxpipe: base.pxpipe || undefined,
     status: base.status || "success",
     ...overrides
@@ -121,11 +122,30 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     completion_tokens: tokens.completion_tokens ?? tokens.output_tokens ?? 0
   };
   const savedChars = Math.max(0, Number(rtkStats?.bytesBefore || 0) - Number(rtkStats?.bytesAfter || 0));
+  normalized.rtk_mode = rtkStats?.mode || "off";
+  if (rtkStats) {
+    normalized.rtk_budget_tokens = Number(rtkStats.budgetTokens) || 0;
+    normalized.rtk_before_tokens_est = Number(rtkStats.tokensBeforeEst) || 0;
+    normalized.rtk_after_tokens_est = Number(rtkStats.tokensAfterEst) || 0;
+    normalized.rtk_budget_truncated = Number(rtkStats.budgetTruncated) || 0;
+    normalized.rtk_duration_ms = Number(rtkStats.durationMs) || 0;
+    normalized.rtk_hits = Array.isArray(rtkStats.hits) ? rtkStats.hits.length : 0;
+    normalized.rtk_filters = Array.from(new Set(
+      (rtkStats.hits || []).map((hit) => hit?.filter).filter(Boolean),
+    ));
+  }
   if (savedChars > 0) {
     normalized.rtk_saved_chars = savedChars;
     normalized.rtk_before_chars = Number(rtkStats.bytesBefore) || 0;
     normalized.rtk_after_chars = Number(rtkStats.bytesAfter) || 0;
     normalized.rtk_saved_tokens_est = Math.round(savedChars / 4);
+  }
+  if (rtkStats?.mode === "budget") {
+    normalized.rtk_budget_saved_tokens_est = Math.max(
+      0,
+      Number(rtkStats.tokensBeforeEst || 0) - Number(rtkStats.tokensAfterEst || 0),
+    );
+    normalized.rtk_budget_bypass_reasons = rtkStats.budgetBypassReasons || {};
   }
 
   saveRequestUsage({

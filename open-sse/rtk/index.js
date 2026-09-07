@@ -3,15 +3,28 @@
 import { RAW_CAP, MIN_COMPRESS_SIZE } from "./constants.js";
 import { autoDetectFilter } from "./autodetect.js";
 import { safeApply } from "./applyFilter.js";
+import {
+  DEFAULT_RTK_BUDGET_TOKENS,
+  RTK_MODES,
+  estimateRtkTokens,
+  fitTextToRtkBudget,
+  normalizeRtkBudgetTokens,
+  normalizeRtkMode,
+} from "./budget.js";
 
 // Compress tool_result content in-place. Returns stats or null if disabled/failed.
-export function compressMessages(body, enabled) {
+export function compressMessages(body, enabled, options = {}) {
   if (!enabled) return null;
   if (!body) return null;
 
+  const mode = normalizeRtkMode(options.mode);
+  const budgetTokens = normalizeRtkBudgetTokens(
+    options.budgetTokens ?? DEFAULT_RTK_BUDGET_TOKENS,
+  );
+
   // Kiro format: conversationState.history + conversationState.currentMessage
   if (body.conversationState) {
-    return compressKiroFormat(body, enabled);
+    return compressKiroFormat(body, { mode, budgetTokens });
   }
 
   // Support both OpenAI/Claude "messages" and OpenAI Responses "input"
@@ -20,7 +33,31 @@ export function compressMessages(body, enabled) {
     : null;
   if (!items) return null;
 
-  const stats = { bytesBefore: 0, bytesAfter: 0, hits: [] };
+  const startedAt = Date.now();
+  const stats = {
+    bytesBefore: 0,
+    bytesAfter: 0,
+    tokensBeforeEst: 0,
+    tokensAfterEst: 0,
+    hits: [],
+    mode,
+    budgetTokens: mode === RTK_MODES.BUDGET ? budgetTokens : null,
+    budgetTruncated: 0,
+    budgetBypassReasons: {},
+    durationMs: 0,
+  };
+
+  const recordBudgetBypass = (reason) => {
+    if (!reason) return;
+    stats.budgetBypassReasons[reason] = (stats.budgetBypassReasons[reason] || 0) + 1;
+  };
+
+  const compress = (text, shape) => compressText(text, stats, shape, {
+    mode,
+    budgetTokens,
+    recordBudgetBypass,
+  });
+
   try {
     for (let i = 0; i < items.length; i++) {
       const msg = items[i];
@@ -28,13 +65,14 @@ export function compressMessages(body, enabled) {
 
       // Shape 4: OpenAI Responses — top-level { type:"function_call_output", output: string | [{type:"input_text", text}] }
       if (msg.type === "function_call_output") {
+        if (msg.is_error === true || msg.status === "error") continue;
         if (typeof msg.output === "string") {
-          msg.output = compressText(msg.output, stats, "openai-responses-string");
+          msg.output = compress(msg.output, "openai-responses-string");
         } else if (Array.isArray(msg.output)) {
           for (let k = 0; k < msg.output.length; k++) {
             const part = msg.output[k];
             if (part && part.type === "input_text" && typeof part.text === "string") {
-              part.text = compressText(part.text, stats, "openai-responses-array");
+              part.text = compress(part.text, "openai-responses-array");
             }
           }
         }
@@ -43,7 +81,8 @@ export function compressMessages(body, enabled) {
 
       // Shape 1: OpenAI tool message — { role:"tool", content: "string" }
       if (msg.role === "tool" && typeof msg.content === "string") {
-        msg.content = compressText(msg.content, stats, "openai-tool");
+        if (msg.is_error === true || msg.status === "error") continue;
+        msg.content = compress(msg.content, "openai-tool");
         continue;
       }
 
@@ -51,10 +90,11 @@ export function compressMessages(body, enabled) {
 
       // Shape 1b: OpenAI tool message — { role:"tool", content:[{type:"text", text:"..."}] }
       if (msg.role === "tool") {
+        if (msg.is_error === true || msg.status === "error") continue;
         for (let k = 0; k < msg.content.length; k++) {
           const part = msg.content[k];
           if (part && part.type === "text" && typeof part.text === "string") {
-            part.text = compressText(part.text, stats, "openai-tool-array");
+            part.text = compress(part.text, "openai-tool-array");
           }
         }
         continue;
@@ -68,13 +108,13 @@ export function compressMessages(body, enabled) {
 
         if (typeof block.content === "string") {
           // Shape 2: claude string form
-          block.content = compressText(block.content, stats, "claude-string");
+          block.content = compress(block.content, "claude-string");
         } else if (Array.isArray(block.content)) {
           // Shape 3: claude array form — compress each text part
           for (let k = 0; k < block.content.length; k++) {
             const part = block.content[k];
             if (part && part.type === "text" && typeof part.text === "string") {
-              part.text = compressText(part.text, stats, "claude-array");
+              part.text = compress(part.text, "claude-array");
             }
           }
         }
@@ -84,12 +124,29 @@ export function compressMessages(body, enabled) {
     console.warn("[RTK] compressMessages error:", e.message);
     return null;
   }
+  stats.durationMs = Date.now() - startedAt;
   return stats;
 }
 
 // Compress Kiro format: conversationState.history[].userInputMessage.userInputMessageContext.toolResults[].content[].text
-function compressKiroFormat(body, enabled) {
-  const stats = { bytesBefore: 0, bytesAfter: 0, hits: [] };
+function compressKiroFormat(body, { mode, budgetTokens }) {
+  const startedAt = Date.now();
+  const stats = {
+    bytesBefore: 0,
+    bytesAfter: 0,
+    tokensBeforeEst: 0,
+    tokensAfterEst: 0,
+    hits: [],
+    mode,
+    budgetTokens: mode === RTK_MODES.BUDGET ? budgetTokens : null,
+    budgetTruncated: 0,
+    budgetBypassReasons: {},
+    durationMs: 0,
+  };
+  const recordBudgetBypass = (reason) => {
+    if (!reason) return;
+    stats.budgetBypassReasons[reason] = (stats.budgetBypassReasons[reason] || 0) + 1;
+  };
   try {
     const state = body.conversationState;
     const allMessages = [...(Array.isArray(state?.history) ? state.history : [])];
@@ -105,7 +162,11 @@ function compressKiroFormat(body, enabled) {
 
         for (const part of tr.content) {
           if (part && typeof part.text === "string") {
-            part.text = compressText(part.text, stats, "kiro-tool-result");
+            part.text = compressText(part.text, stats, "kiro-tool-result", {
+              mode,
+              budgetTokens,
+              recordBudgetBypass,
+            });
           }
         }
       }
@@ -114,34 +175,62 @@ function compressKiroFormat(body, enabled) {
     console.warn("[RTK] compressKiroFormat error:", e.message);
     return null;
   }
+  stats.durationMs = Date.now() - startedAt;
   return stats;
 }
 
-function compressText(text, stats, shape) {
+function compressText(text, stats, shape, { mode, budgetTokens, recordBudgetBypass }) {
   const bytesIn = text.length;
   stats.bytesBefore += bytesIn;
+  stats.tokensBeforeEst += estimateRtkTokens(text);
 
   if (bytesIn < MIN_COMPRESS_SIZE || bytesIn > RAW_CAP) {
     stats.bytesAfter += bytesIn;
+    stats.tokensAfterEst += estimateRtkTokens(text);
     return text;
   }
 
   const fn = autoDetectFilter(text);
   if (!fn) {
     stats.bytesAfter += bytesIn;
+    stats.tokensAfterEst += estimateRtkTokens(text);
+    if (mode === RTK_MODES.BUDGET) recordBudgetBypass("unrecognized");
     return text;
   }
 
-  const out = safeApply(fn, text);
+  let out = safeApply(fn, text);
 
   // Safety: never return empty, never grow the input
   if (!out || out.length === 0 || out.length >= bytesIn) {
+    out = text;
+  }
+
+  let budgeted = false;
+  if (mode === RTK_MODES.BUDGET) {
+    const fitted = fitTextToRtkBudget(out, budgetTokens);
+    if (fitted.truncated) {
+      out = fitted.text;
+      budgeted = true;
+      stats.budgetTruncated++;
+    } else if (fitted.reason) {
+      recordBudgetBypass(fitted.reason);
+    }
+  }
+
+  if (!out || out.length === 0 || out.length >= bytesIn) {
     stats.bytesAfter += bytesIn;
+    stats.tokensAfterEst += estimateRtkTokens(text);
     return text;
   }
 
   stats.bytesAfter += out.length;
-  stats.hits.push({ shape, filter: fn.filterName || fn.name, saved: bytesIn - out.length });
+  stats.tokensAfterEst += estimateRtkTokens(out);
+  stats.hits.push({
+    shape,
+    filter: fn.filterName || fn.name,
+    saved: bytesIn - out.length,
+    budgeted,
+  });
   return out;
 }
 
@@ -151,5 +240,8 @@ export function formatRtkLog(stats) {
   const saved = stats.bytesBefore - stats.bytesAfter;
   const pct = stats.bytesBefore > 0 ? ((saved / stats.bytesBefore) * 100).toFixed(1) : "0";
   const filters = Array.from(new Set(stats.hits.map(h => h.filter))).join(",");
-  return `[RTK] saved ${saved}B / ${stats.bytesBefore}B (${pct}%) via [${filters}] hits=${stats.hits.length}`;
+  const budget = stats.mode === RTK_MODES.BUDGET
+    ? ` budget=${stats.budgetTokens}tok truncated=${stats.budgetTruncated}`
+    : "";
+  return `[RTK] saved ${saved}B / ${stats.bytesBefore}B (${pct}%) via [${filters}] hits=${stats.hits.length}${budget}`;
 }

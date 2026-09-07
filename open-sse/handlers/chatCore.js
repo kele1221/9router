@@ -59,7 +59,7 @@ export function stripContinuityFields(body) {
   return body;
 }
 
-export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking }) {
+export async function handleChatCore({ body, modelInfo, credentials, log, onCredentialsRefreshed, onRequestSuccess, onDisconnect, clientRawRequest, connectionId, userAgent, apiKey, ccFilterNaming, rtkEnabled, rtkMode = "classic", rtkBudgetTokens, headroomEnabled, headroomUrl, headroomCompressUserMessages, headroomTimeoutMs, cavemanEnabled, cavemanLevel, ponytailEnabled, ponytailLevel, pxpipeEnabled, pxpipeMinChars, pxpipeTimeoutMs, pxpipeTransform, onPxpipeEvent, sourceFormatOverride, providerThinking }) {
   const { provider, model } = modelInfo;
   const requestStartTime = Date.now();
   // Stable per-session color so all lines of one CLI conversation share a tag
@@ -252,7 +252,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   const tokenSaverEnabled = clientRawRequest?.headers?.[TOKEN_SAVER_HEADER]?.toLowerCase() !== "off";
 
   // RTK: compress tool_result content
-  const rtkStats = compressMessages(translatedBody, tokenSaverEnabled && rtkEnabled);
+  const rtkStats = compressMessages(translatedBody, tokenSaverEnabled && rtkEnabled, {
+    mode: rtkMode,
+    budgetTokens: rtkBudgetTokens,
+  });
   const rtkLine = formatRtkLog(rtkStats);
   if (rtkLine) console.log(rtkLine);
 
@@ -374,6 +377,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       request: extractRequestConfig(body, stream),
       providerRequest: translatedBody || null,
       response: { error: error.message || String(error), status: error.name === "AbortError" ? 499 : 502, thinking: null },
+      rtk: rtkStats,
       pxpipe: pxpipeSummary,
       status: "error"
     })).catch(() => { });
@@ -454,6 +458,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       request: extractRequestConfig(body, stream),
       providerRequest: finalBody || translatedBody || null,
       response: { error: message, status: statusCode, thinking: null },
+      rtk: rtkStats,
       pxpipe: pxpipeSummary,
       status: "error"
     })).catch(() => { });

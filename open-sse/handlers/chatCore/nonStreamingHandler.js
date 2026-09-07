@@ -383,6 +383,7 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
       thinking: translatedResponse?.choices?.[0]?.message?.reasoning_content || translatedResponse?.reasoning_content || null,
       finish_reason: translatedResponse?.choices?.[0]?.finish_reason || "unknown"
     },
+    rtk: rtkStats,
     pxpipe,
     status: "success"
   }, { endpoint: clientRawRequest?.endpoint || null })).catch(err => {

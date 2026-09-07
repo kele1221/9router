@@ -76,8 +76,25 @@ function addToCounter(target, key, values) {
   target[key].rtkSavedChars = (target[key].rtkSavedChars || 0) + (values.rtkSavedChars || 0);
   target[key].rtkBeforeChars = (target[key].rtkBeforeChars || 0) + (values.rtkBeforeChars || 0);
   target[key].rtkAfterChars = (target[key].rtkAfterChars || 0) + (values.rtkAfterChars || 0);
+  target[key].rtkBudgetRequests = (target[key].rtkBudgetRequests || 0) + (values.rtkBudgetRequests || 0);
+  target[key].rtkBudgetApplied = (target[key].rtkBudgetApplied || 0) + (values.rtkBudgetApplied || 0);
+  target[key].rtkBudgetTruncated = (target[key].rtkBudgetTruncated || 0) + (values.rtkBudgetTruncated || 0);
+  target[key].rtkBudgetSavedTokens = (target[key].rtkBudgetSavedTokens || 0) + (values.rtkBudgetSavedTokens || 0);
+  target[key].rtkBudgetBeforeTokens = (target[key].rtkBudgetBeforeTokens || 0) + (values.rtkBudgetBeforeTokens || 0);
+  target[key].rtkBudgetAfterTokens = (target[key].rtkBudgetAfterTokens || 0) + (values.rtkBudgetAfterTokens || 0);
+  target[key].rtkBudgetDurationMs = (target[key].rtkBudgetDurationMs || 0) + (values.rtkBudgetDurationMs || 0);
   target[key].cost += values.cost || 0;
   if (values.meta) Object.assign(target[key], values.meta);
+}
+
+function addRtkBudgetAggregate(target, values) {
+  target.rtkBudgetRequests = (target.rtkBudgetRequests || 0) + (values.rtkBudgetRequests || 0);
+  target.rtkBudgetApplied = (target.rtkBudgetApplied || 0) + (values.rtkBudgetApplied || 0);
+  target.rtkBudgetTruncated = (target.rtkBudgetTruncated || 0) + (values.rtkBudgetTruncated || 0);
+  target.rtkBudgetSavedTokens = (target.rtkBudgetSavedTokens || 0) + (values.rtkBudgetSavedTokens || 0);
+  target.rtkBudgetBeforeTokens = (target.rtkBudgetBeforeTokens || 0) + (values.rtkBudgetBeforeTokens || 0);
+  target.rtkBudgetAfterTokens = (target.rtkBudgetAfterTokens || 0) + (values.rtkBudgetAfterTokens || 0);
+  target.rtkBudgetDurationMs = (target.rtkBudgetDurationMs || 0) + (values.rtkBudgetDurationMs || 0);
 }
 
 function aggregateEntryToDay(day, entry) {
@@ -89,7 +106,14 @@ function aggregateEntryToDay(day, entry) {
   const rtkSavedChars = entry.tokens?.rtk_saved_chars || 0;
   const rtkBeforeChars = entry.tokens?.rtk_before_chars || 0;
   const rtkAfterChars = entry.tokens?.rtk_after_chars || 0;
-  const vals = { promptTokens, completionTokens, cachedTokens, cost, estimatedSavedTokens, rtkSavedChars, rtkBeforeChars, rtkAfterChars };
+  const rtkBudgetRequests = entry.tokens?.rtk_mode === "budget" ? 1 : 0;
+  const rtkBudgetApplied = entry.tokens?.rtk_budget_saved_tokens_est > 0 ? 1 : 0;
+  const rtkBudgetTruncated = entry.tokens?.rtk_budget_truncated || 0;
+  const rtkBudgetSavedTokens = entry.tokens?.rtk_budget_saved_tokens_est || 0;
+  const rtkBudgetBeforeTokens = entry.tokens?.rtk_before_tokens_est || 0;
+  const rtkBudgetAfterTokens = entry.tokens?.rtk_after_tokens_est || 0;
+  const rtkBudgetDurationMs = entry.tokens?.rtk_duration_ms || 0;
+  const vals = { promptTokens, completionTokens, cachedTokens, cost, estimatedSavedTokens, rtkSavedChars, rtkBeforeChars, rtkAfterChars, rtkBudgetRequests, rtkBudgetApplied, rtkBudgetTruncated, rtkBudgetSavedTokens, rtkBudgetBeforeTokens, rtkBudgetAfterTokens, rtkBudgetDurationMs };
 
   day.requests = (day.requests || 0) + 1;
   day.promptTokens = (day.promptTokens || 0) + promptTokens;
@@ -99,6 +123,7 @@ function aggregateEntryToDay(day, entry) {
   day.rtkSavedChars = (day.rtkSavedChars || 0) + rtkSavedChars;
   day.rtkBeforeChars = (day.rtkBeforeChars || 0) + rtkBeforeChars;
   day.rtkAfterChars = (day.rtkAfterChars || 0) + rtkAfterChars;
+  addRtkBudgetAggregate(day, vals);
   day.cost = (day.cost || 0) + cost;
 
   day.byProvider ||= {};
@@ -427,6 +452,9 @@ export async function getUsageStats(period = "all") {
     totalRequests: 0,
     totalPromptTokens: 0, totalCompletionTokens: 0, totalCachedTokens: 0,
     totalEstimatedSavedTokens: 0, totalRtkSavedChars: 0, totalRtkBeforeChars: 0, totalRtkAfterChars: 0, totalCost: 0,
+    totalRtkBudgetRequests: 0, totalRtkBudgetApplied: 0, totalRtkBudgetTruncated: 0,
+    totalRtkBudgetSavedTokens: 0, totalRtkBudgetBeforeTokens: 0, totalRtkBudgetAfterTokens: 0,
+    totalRtkBudgetDurationMs: 0,
     byProvider: {}, byModel: {}, byAccount: {}, byApiKey: {}, byEndpoint: {},
     last10Minutes: [],
     pending: pendingRequests,
@@ -492,6 +520,13 @@ export async function getUsageStats(period = "all") {
       stats.totalRtkSavedChars += day.rtkSavedChars || 0;
       stats.totalRtkBeforeChars += day.rtkBeforeChars || 0;
       stats.totalRtkAfterChars += day.rtkAfterChars || 0;
+      stats.totalRtkBudgetRequests += day.rtkBudgetRequests || 0;
+      stats.totalRtkBudgetApplied += day.rtkBudgetApplied || 0;
+      stats.totalRtkBudgetTruncated += day.rtkBudgetTruncated || 0;
+      stats.totalRtkBudgetSavedTokens += day.rtkBudgetSavedTokens || 0;
+      stats.totalRtkBudgetBeforeTokens += day.rtkBudgetBeforeTokens || 0;
+      stats.totalRtkBudgetAfterTokens += day.rtkBudgetAfterTokens || 0;
+      stats.totalRtkBudgetDurationMs += day.rtkBudgetDurationMs || 0;
       stats.totalCost += day.cost || 0;
 
       for (const [prov, p] of Object.entries(day.byProvider || {})) {
@@ -501,6 +536,7 @@ export async function getUsageStats(period = "all") {
         stats.byProvider[prov].completionTokens += p.completionTokens || 0;
         stats.byProvider[prov].cachedTokens += p.cachedTokens || 0;
         stats.byProvider[prov].cost += p.cost || 0;
+        addRtkBudgetAggregate(stats.byProvider[prov], p);
       }
 
       for (const [mk, m] of Object.entries(day.byModel || {})) {
@@ -516,6 +552,7 @@ export async function getUsageStats(period = "all") {
         stats.byModel[statsKey].completionTokens += m.completionTokens || 0;
         stats.byModel[statsKey].cachedTokens += m.cachedTokens || 0;
         stats.byModel[statsKey].cost += m.cost || 0;
+        addRtkBudgetAggregate(stats.byModel[statsKey], m);
         if (dateKey > (stats.byModel[statsKey].lastUsed || "")) stats.byModel[statsKey].lastUsed = dateKey;
       }
 
@@ -533,6 +570,7 @@ export async function getUsageStats(period = "all") {
         stats.byAccount[accountKey].completionTokens += a.completionTokens || 0;
         stats.byAccount[accountKey].cachedTokens += a.cachedTokens || 0;
         stats.byAccount[accountKey].cost += a.cost || 0;
+        addRtkBudgetAggregate(stats.byAccount[accountKey], a);
         if (dateKey > (stats.byAccount[accountKey].lastUsed || "")) stats.byAccount[accountKey].lastUsed = dateKey;
       }
 
@@ -553,6 +591,7 @@ export async function getUsageStats(period = "all") {
         stats.byApiKey[akKey].completionTokens += ak.completionTokens || 0;
         stats.byApiKey[akKey].cachedTokens += ak.cachedTokens || 0;
         stats.byApiKey[akKey].cost += ak.cost || 0;
+        addRtkBudgetAggregate(stats.byApiKey[akKey], ak);
         if (dateKey > (stats.byApiKey[akKey].lastUsed || "")) stats.byApiKey[akKey].lastUsed = dateKey;
       }
 
@@ -569,6 +608,7 @@ export async function getUsageStats(period = "all") {
         stats.byEndpoint[epKey].completionTokens += ep.completionTokens || 0;
         stats.byEndpoint[epKey].cachedTokens += ep.cachedTokens || 0;
         stats.byEndpoint[epKey].cost += ep.cost || 0;
+        addRtkBudgetAggregate(stats.byEndpoint[epKey], ep);
         if (dateKey > (stats.byEndpoint[epKey].lastUsed || "")) stats.byEndpoint[epKey].lastUsed = dateKey;
       }
     }
@@ -621,6 +661,15 @@ export async function getUsageStats(period = "all") {
       const cachedTokens = tokens.cached_tokens || tokens.cache_read_input_tokens || 0;
       const entryCost = r.cost || 0;
       const providerDisplayName = providerNodeNameMap[r.provider] || r.provider;
+      const rtkBudgetValues = {
+        rtkBudgetRequests: tokens.rtk_mode === "budget" ? 1 : 0,
+        rtkBudgetApplied: tokens.rtk_budget_saved_tokens_est > 0 ? 1 : 0,
+        rtkBudgetTruncated: tokens.rtk_budget_truncated || 0,
+        rtkBudgetSavedTokens: tokens.rtk_budget_saved_tokens_est || 0,
+        rtkBudgetBeforeTokens: tokens.rtk_before_tokens_est || 0,
+        rtkBudgetAfterTokens: tokens.rtk_after_tokens_est || 0,
+        rtkBudgetDurationMs: tokens.rtk_duration_ms || 0,
+      };
 
       stats.totalPromptTokens += promptTokens;
       stats.totalCompletionTokens += completionTokens;
@@ -629,6 +678,13 @@ export async function getUsageStats(period = "all") {
       stats.totalRtkSavedChars += tokens.rtk_saved_chars || 0;
       stats.totalRtkBeforeChars += tokens.rtk_before_chars || 0;
       stats.totalRtkAfterChars += tokens.rtk_after_chars || 0;
+      stats.totalRtkBudgetRequests += tokens.rtk_mode === "budget" ? 1 : 0;
+      stats.totalRtkBudgetApplied += tokens.rtk_budget_saved_tokens_est > 0 ? 1 : 0;
+      stats.totalRtkBudgetTruncated += tokens.rtk_budget_truncated || 0;
+      stats.totalRtkBudgetSavedTokens += tokens.rtk_budget_saved_tokens_est || 0;
+      stats.totalRtkBudgetBeforeTokens += tokens.rtk_before_tokens_est || 0;
+      stats.totalRtkBudgetAfterTokens += tokens.rtk_after_tokens_est || 0;
+      stats.totalRtkBudgetDurationMs += tokens.rtk_duration_ms || 0;
       stats.totalCost += entryCost;
 
       if (!stats.byProvider[r.provider]) stats.byProvider[r.provider] = { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0 };
@@ -637,6 +693,7 @@ export async function getUsageStats(period = "all") {
       stats.byProvider[r.provider].completionTokens += completionTokens;
       stats.byProvider[r.provider].cachedTokens += cachedTokens;
       stats.byProvider[r.provider].cost += entryCost;
+      addRtkBudgetAggregate(stats.byProvider[r.provider], rtkBudgetValues);
 
       const modelKey = r.provider ? `${r.model} (${r.provider})` : r.model;
       if (!stats.byModel[modelKey]) {
@@ -647,6 +704,7 @@ export async function getUsageStats(period = "all") {
       stats.byModel[modelKey].completionTokens += completionTokens;
       stats.byModel[modelKey].cachedTokens += cachedTokens;
       stats.byModel[modelKey].cost += entryCost;
+      addRtkBudgetAggregate(stats.byModel[modelKey], rtkBudgetValues);
       if (new Date(r.timestamp) > new Date(stats.byModel[modelKey].lastUsed)) stats.byModel[modelKey].lastUsed = r.timestamp;
 
       if (r.connectionId) {
@@ -660,6 +718,7 @@ export async function getUsageStats(period = "all") {
         stats.byAccount[accountKey].completionTokens += completionTokens;
         stats.byAccount[accountKey].cachedTokens += cachedTokens;
         stats.byAccount[accountKey].cost += entryCost;
+        addRtkBudgetAggregate(stats.byAccount[accountKey], rtkBudgetValues);
         if (new Date(r.timestamp) > new Date(stats.byAccount[accountKey].lastUsed)) stats.byAccount[accountKey].lastUsed = r.timestamp;
       }
 
@@ -673,6 +732,7 @@ export async function getUsageStats(period = "all") {
         }
         const ake = stats.byApiKey[akKey];
         ake.requests++; ake.promptTokens += promptTokens; ake.completionTokens += completionTokens; ake.cachedTokens += cachedTokens; ake.cost += entryCost;
+        addRtkBudgetAggregate(ake, rtkBudgetValues);
         if (new Date(r.timestamp) > new Date(ake.lastUsed)) ake.lastUsed = r.timestamp;
       } else {
         if (!stats.byApiKey["local-no-key"]) {
@@ -680,6 +740,7 @@ export async function getUsageStats(period = "all") {
         }
         const ake = stats.byApiKey["local-no-key"];
         ake.requests++; ake.promptTokens += promptTokens; ake.completionTokens += completionTokens; ake.cachedTokens += cachedTokens; ake.cost += entryCost;
+        addRtkBudgetAggregate(ake, rtkBudgetValues);
         if (new Date(r.timestamp) > new Date(ake.lastUsed)) ake.lastUsed = r.timestamp;
       }
 
@@ -690,6 +751,7 @@ export async function getUsageStats(period = "all") {
       }
       const epe = stats.byEndpoint[epKey];
       epe.requests++; epe.promptTokens += promptTokens; epe.completionTokens += completionTokens; epe.cachedTokens += cachedTokens; epe.cost += entryCost;
+      addRtkBudgetAggregate(epe, rtkBudgetValues);
       if (new Date(r.timestamp) > new Date(epe.lastUsed)) epe.lastUsed = r.timestamp;
     }
   }

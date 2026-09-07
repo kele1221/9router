@@ -39,6 +39,11 @@ export default function OverviewCards({ stats }) {
             : "—"}
         </span>
         <span className="text-[10px] text-text-muted">RTK 工具结果压缩估算</span>
+        {(stats.totalRtkBudgetRequests || 0) > 0 && (
+          <span className="text-[10px] text-text-muted">
+            Budget: {fmt(stats.totalRtkBudgetSavedTokens)} est. tokens / {fmt(stats.totalRtkBudgetRequests)} req
+          </span>
+        )}
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Output Tokens</span>

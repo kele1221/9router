@@ -12,6 +12,8 @@ import {
 
 export default function TokenSaverClient() {
   const [rtkEnabled, setRtkEnabledState] = useState(true);
+  const [rtkMode, setRtkMode] = useState("classic");
+  const [rtkBudgetTokens, setRtkBudgetTokens] = useState(4000);
   const [headroomEnabled, setHeadroomEnabled] = useState(false);
   const [headroomUrl, setHeadroomUrl] = useState("http://localhost:8787");
   const [headroomTimeoutMs, setHeadroomTimeoutMs] = useState(3000);
@@ -103,6 +105,18 @@ export default function TokenSaverClient() {
     } catch (error) {
       console.log("Error updating rtkEnabled:", error);
     }
+  };
+
+  const handleRtkMode = (mode) => {
+    setRtkMode(mode);
+    patchSetting({ rtkMode: mode });
+  };
+
+  const handleRtkBudgetTokensBlur = () => {
+    const raw = Math.round(Number(rtkBudgetTokens));
+    const next = Number.isFinite(raw) ? Math.min(100000, Math.max(128, raw)) : 4000;
+    setRtkBudgetTokens(next);
+    patchSetting({ rtkBudgetTokens: next });
   };
 
   const handleCavemanEnabled = (value) => {
@@ -421,6 +435,8 @@ export default function TokenSaverClient() {
         if (res.ok) {
           const data = await res.json();
           setRtkEnabledState(data.rtkEnabled !== false);
+          setRtkMode(data.rtkMode === "budget" ? "budget" : "classic");
+          if (typeof data.rtkBudgetTokens === "number") setRtkBudgetTokens(data.rtkBudgetTokens);
           setHeadroomEnabled(!!data.headroomEnabled);
           setHeadroomUrl(data.headroomUrl || "http://localhost:8787");
           if (typeof data.headroomTimeoutMs === "number") setHeadroomTimeoutMs(data.headroomTimeoutMs);
@@ -505,6 +521,48 @@ export default function TokenSaverClient() {
             checked={rtkEnabled}
             onChange={() => handleRtkEnabled(!rtkEnabled)}
           />
+        </div>
+        <div className="mb-4 ml-1 border-l-2 border-border pl-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-medium">RTK mode</p>
+              <p className="text-xs text-text-muted">
+                Budget mode is experimental and records comparison metrics.
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {["classic", "budget"].map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handleRtkMode(mode)}
+                  className={`rounded border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    rtkMode === mode
+                      ? "border-primary bg-primary text-white"
+                      : "border-border text-text-muted hover:bg-surface-2"
+                  }`}
+                >
+                  {mode === "classic" ? "Classic" : "Budget"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {rtkMode === "budget" && (
+            <div className="mt-3 flex items-center gap-2">
+              <label htmlFor="rtk-budget-tokens" className="text-xs text-text-muted">
+                Max estimated tokens
+              </label>
+              <Input
+                id="rtk-budget-tokens"
+                value={String(rtkBudgetTokens)}
+                onChange={(e) => setRtkBudgetTokens(e.target.value)}
+                onBlur={handleRtkBudgetTokensBlur}
+                className="w-28 font-mono text-sm"
+                inputMode="numeric"
+              />
+              <span className="text-xs text-text-muted">128–100000</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-between py-4 gap-4 flex-wrap">
           <div className="min-w-0 flex-1">

@@ -34,6 +34,7 @@ describe("OpenCode Go model catalog", () => {
       "mimo-v2.5", "mimo-v2.5-pro",
       "minimax-m3", "minimax-m2.7", "minimax-m2.5",
       "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
+      "muse-spark-1.2-contributor", "muse-spark-1.3-contributor",
     ]);
   });
 });
@@ -127,6 +128,15 @@ describe("OpenCode Go per-model transport guard (chatCore logic)", () => {
 
   it("does NOT route GPT-5.6 Luna to /messages or /chat/completions on other formats", () => {
     for (const m of RESPONSES_ONLY) {
+      expect(pickTransport("opencode-go", "claude", "opencode-go", m)).toBeNull();
+      expect(pickTransport("opencode-go", "openai", "opencode-go", m)).toBeNull();
+    }
+  });
+
+  it("routes Muse Spark (responses-only) to /responses, never to /messages", () => {
+    for (const m of ["muse-spark-1.2-contributor", "muse-spark-1.3-contributor"]) {
+      expect(getModelSupportedFormats("opencode-go", m)).toEqual(["openai-responses"]);
+      expect(pickTransport("opencode-go", "openai-responses", "opencode-go", m)?.baseUrl).toBe("https://opencode.ai/zen/go/v1/responses");
       expect(pickTransport("opencode-go", "claude", "opencode-go", m)).toBeNull();
       expect(pickTransport("opencode-go", "openai", "opencode-go", m)).toBeNull();
     }

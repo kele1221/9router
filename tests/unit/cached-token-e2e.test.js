@@ -59,6 +59,72 @@ describe("cached-token end-to-end (persist + aggregate + cost)", () => {
     expect(hist[0].tokens.cache_creation_input_tokens).toBe(30);
   });
 
+  it("RTK estimated saved tokens persist and aggregate by period", async () => {
+    await db.saveRequestUsage({
+      provider: "rtk-test",
+      model: "rtk-model",
+      tokens: {
+        prompt_tokens: 1000,
+        completion_tokens: 200,
+        rtk_saved_chars: 400,
+        rtk_before_chars: 1000,
+        rtk_after_chars: 600,
+        rtk_saved_tokens_est: 100,
+      },
+      endpoint: "/v1/chat/completions",
+      status: "ok",
+    });
+
+    const stats24h = await db.getUsageStats("24h");
+    expect(stats24h.totalEstimatedSavedTokens).toBe(100);
+    expect(stats24h.totalRtkSavedChars).toBe(400);
+    expect(stats24h.totalRtkBeforeChars).toBe(1000);
+    expect(stats24h.totalRtkAfterChars).toBe(600);
+
+    const statsAll = await db.getUsageStats("all");
+    expect(statsAll.totalEstimatedSavedTokens).toBe(100);
+    expect(statsAll.totalRtkSavedChars).toBe(400);
+  });
+
+  it("RTK budget metrics persist and aggregate by period", async () => {
+    await db.saveRequestUsage({
+      provider: "rtk-budget-test",
+      model: "rtk-budget-model",
+      tokens: {
+        prompt_tokens: 800,
+        completion_tokens: 20,
+        rtk_mode: "budget",
+        rtk_budget_tokens: 128,
+        rtk_before_tokens_est: 2400,
+        rtk_after_tokens_est: 120,
+        rtk_budget_saved_tokens_est: 2280,
+        rtk_budget_truncated: 1,
+        rtk_duration_ms: 7,
+      },
+      endpoint: "/v1/chat/completions",
+      status: "ok",
+    });
+
+    const stats = await db.getUsageStats("24h");
+    expect(stats.totalRtkBudgetRequests).toBe(1);
+    expect(stats.totalRtkBudgetApplied).toBe(1);
+    expect(stats.totalRtkBudgetSavedTokens).toBe(2280);
+    expect(stats.totalRtkBudgetBeforeTokens).toBe(2400);
+    expect(stats.totalRtkBudgetAfterTokens).toBe(120);
+    expect(stats.totalRtkBudgetTruncated).toBe(1);
+    expect(stats.totalRtkBudgetDurationMs).toBe(7);
+
+    const history = await db.getUsageHistory({ provider: "rtk-budget-test" });
+    expect(history.at(-1).tokens.rtk_mode).toBe("budget");
+    expect(history.at(-1).tokens.rtk_budget_saved_tokens_est).toBe(2280);
+  });
+
+  it("all chart aggregates usage by month", async () => {
+    const chart = await db.getChartData("all");
+    expect(chart.length).toBeGreaterThan(0);
+    expect(chart.at(-1).tokens).toBeGreaterThanOrEqual(1200);
+  });
+
   it("OpenAI cache usage: inclusive prompt passes through, cached counted once", async () => {
     const canonical = canonicalizeUsage({
       prompt_tokens: 1000,        // already includes cached

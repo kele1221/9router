@@ -10,7 +10,7 @@ const fmtCost = (n) => `¥${((n || 0) * USD_RATE).toFixed(2)}`;
 
 export default function OverviewCards({ stats }) {
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 sm:gap-4">
+    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 sm:gap-4">
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Total Requests</span>
         <span className="truncate text-2xl font-bold">{fmt(stats.totalRequests)}</span>
@@ -30,6 +30,20 @@ export default function OverviewCards({ stats }) {
             ? (stats.totalCachedTokens / stats.totalPromptTokens * 100).toFixed(1) + "%"
             : "—"}
         </span>
+      </Card>
+      <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
+        <span className="text-text-muted text-sm font-semibold">Token 节省率</span>
+        <span className="truncate text-2xl font-bold text-success">
+          {stats.totalRtkSavedChars > 0
+            ? `${(stats.totalRtkSavedChars / (stats.totalRtkSavedChars + (stats.totalRtkAfterChars || 0)) * 100).toFixed(1)}%`
+            : "—"}
+        </span>
+        <span className="text-[10px] text-text-muted">RTK 工具结果压缩估算</span>
+        {(stats.totalRtkBudgetRequests || 0) > 0 && (
+          <span className="text-[10px] text-text-muted">
+            Budget: {fmt(stats.totalRtkBudgetSavedTokens)} est. tokens / {fmt(stats.totalRtkBudgetRequests)} req
+          </span>
+        )}
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Output Tokens</span>

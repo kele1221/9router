@@ -1,7 +1,7 @@
 {
   "name": "9router",
-  "version": "0.5.69",
-  "forkVersion": "0.5.69-k.15",
+  "version": "0.5.75",
+  "forkVersion": "0.5.75-k.0",
   "forkRepository": "https://github.com/kele1221/9router",
   "description": "9Router CLI - Start and manage 9Router server",
   "bin": {

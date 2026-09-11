@@ -46,13 +46,16 @@ export default {
   ],
   // Public Go catalog: fetched live so the dashboard shows newly added models.
   modelsFetcher: { url: "https://opencode.ai/zen/go/v1/models", type: "opencode-go" },
+  // supportedFormats follow the endpoint table in https://opencode.ai/docs/go/
   models: [
+    { id: "deepseek-flash", name: "DeepSeek V4.1 Flash", supportedFormats: ["openai"] },
     { id: "glm-5.3-flash", name: "GLM 5.3 Flash (Vision)", supportedFormats: ["openai"] },
+    { id: "glm-5.3", name: "GLM 5.3", supportedFormats: ["openai"] },
     { id: "glm-5.2", name: "GLM 5.2", supportedFormats: ["openai"] },
     { id: "glm-5.1", name: "GLM 5.1", supportedFormats: ["openai"] },
-    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", supportedFormats: ["openai-responses"] },
     { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", supportedFormats: ["openai"] },
     { id: "kimi-k2.6", name: "Kimi K2.6", supportedFormats: ["openai"] },
+    { id: "kimi-k3", name: "Kimi K3", supportedFormats: ["openai"] },
     // DeepSeek thinking models: NO openai-responses. Console Go's /v1/responses
     // demands the REAL prior reasoning echoed back for thinking-mode continuity
     // ("reasoning_text must be passed back") — a placeholder is rejected, and
@@ -61,16 +64,23 @@ export default {
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", supportedFormats: ["openai", "claude"] },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", supportedFormats: ["openai", "claude"] },
     { id: "deepseek-v4-flash-vision-exp", name: "DeepSeek V4 Flash Vision (Exp)", supportedFormats: ["openai", "claude"] },
+    { id: "longcat-2.0", name: "LongCat 2.0", supportedFormats: ["openai"] },
     { id: "mimo-v2.5", name: "MiMo V2.5", supportedFormats: ["openai"] },
     { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", supportedFormats: ["openai"] },
     { id: "minimax-m3", name: "MiniMax M3", supportedFormats: ["openai", "claude"] },
     { id: "minimax-m2.7", name: "MiniMax M2.7", supportedFormats: ["openai", "claude"] },
     { id: "minimax-m2.5", name: "MiniMax M2.5", supportedFormats: ["openai", "claude"] },
+    { id: "qwen3.8-max", name: "Qwen 3.8 Max", supportedFormats: ["openai", "claude"] },
+    { id: "qwen3.8-flash", name: "Qwen 3.8 Flash", supportedFormats: ["openai", "claude"] },
     { id: "qwen3.7-max", name: "Qwen 3.7 Max", supportedFormats: ["openai", "claude"] },
     { id: "qwen3.7-plus", name: "Qwen 3.7 Plus", supportedFormats: ["openai", "claude"] },
     { id: "qwen3.6-plus", name: "Qwen 3.6 Plus", supportedFormats: ["openai", "claude"] },
-    // Muse Spark is served by /zen/go/v1/responses only — responses-only entry forces
-    // chatCore past the sourceFormat-matched transports into translation (see chatCore guard).
+    { id: "hy4-preview", name: "Hy4 Preview", supportedFormats: ["openai"] },
+    { id: "hy3", name: "Hy3", supportedFormats: ["openai"] },
+    // Served by /zen/go/v1/responses only — the responses-only entry forces chatCore
+    // past the sourceFormat-matched transports into translation (see chatCore guard).
+    { id: "grok-4.6", name: "Grok 4.6", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
+    { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
     { id: "muse-spark-1.2-contributor", name: "Muse Spark 1.2 Contributor", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
     { id: "muse-spark-1.3-contributor", name: "Muse Spark 1.3 Contributor", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
   ],

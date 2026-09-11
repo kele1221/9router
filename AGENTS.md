@@ -89,3 +89,9 @@ Pre-translate hooks that compress `tool_result` content in-place to cut tokens. 
 - Security-sensitive env: `JWT_SECRET` (session cookie), `INITIAL_PASSWORD` (default `123456` — must override), `API_KEY_SECRET`, `MACHINE_ID_SALT`. Full env contract in `.env.example` and ARCHITECTURE.md's env matrix.
 - Binary/protobuf upstreams (kiro EventStream, cursor protobuf, commandcode NDJSON) don't round-trip through OpenAI — they're handled inside their own executor, not the translator.
 - Versioning: root and `cli/` are versioned independently; changes are logged in `CHANGELOG.md`. Commit style is Conventional Commits (`fix(translator): …`, `feat(...)`).
+
+## Trellis 使用策略
+
+- 默认不使用 Trellis；简单问答、单文件小改动、局部修复、常规验证和短任务直接处理。
+- 只有明确复杂的需求（多文件或跨模块、长流程、需要 PRD/设计/研究、多 agent 协作等）才默认使用 Trellis。
+- 用户明确要求使用 Trellis 时，无论任务大小都使用；已有 active task 则继续其流程。

@@ -29,6 +29,7 @@ env:
 jobs:
   prepare:
     name: Validate release
+    if: ${{ github.repository == 'decolua/9router' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -125,6 +126,7 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     needs: prepare
+    if: ${{ github.repository == 'decolua/9router' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
@@ -246,6 +248,7 @@ jobs:
     needs:
       - prepare
       - build
+    if: ${{ github.repository == 'decolua/9router' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

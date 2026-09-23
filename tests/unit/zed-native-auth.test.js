@@ -1,5 +1,5 @@
 // Acceptance suite for the Zed native-app auth fix.
-// RUN WITH AN ISOLATED DB:  DATA_DIR=$(mktemp -d) npx vitest run unit/zed-native-auth.test.js
+// Runs against a throwaway DATA_DIR (tests/setup/isolatedDataDir.js) — never the live DB.
 //
 // Covers criteria:
 //   1. Zed proxy starts

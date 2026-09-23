@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 3;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -151,6 +151,81 @@ export const TABLES = {
       "CREATE INDEX IF NOT EXISTS idx_rd_model ON requestDetails(model)",
       "CREATE INDEX IF NOT EXISTS idx_rd_conn ON requestDetails(connectionId)",
     ],
+  },
+  // ─── Model capability evaluation (可视化代码生成评测) ───
+  // User-defined prompts only; built-in presets live in
+  // src/shared/constants/evalPrompts.js so upgrades can refresh them.
+  modelEvalPrompts: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      name: "TEXT NOT NULL",
+      content: "TEXT NOT NULL",
+      createdAt: "TEXT NOT NULL",
+      updatedAt: "TEXT NOT NULL",
+    },
+  },
+  modelEvalRuns: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      promptId: "TEXT",
+      promptName: "TEXT",
+      // Snapshot: editing/deleting a prompt must not rewrite history.
+      promptContent: "TEXT NOT NULL",
+      source: "TEXT NOT NULL",
+      scheduleId: "TEXT",
+      models: "TEXT NOT NULL",
+      status: "TEXT NOT NULL",
+      error: "TEXT",
+      startedAt: "TEXT NOT NULL",
+      finishedAt: "TEXT",
+    },
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_merv_started ON modelEvalRuns(startedAt DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_merv_schedule ON modelEvalRuns(scheduleId)",
+    ],
+  },
+  modelEvalResults: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      runId: "TEXT NOT NULL",
+      model: "TEXT NOT NULL",
+      provider: "TEXT",
+      status: "TEXT NOT NULL",
+      code: "TEXT",
+      rawText: "TEXT",
+      // Absolute path of the copy written to disk (model-eval-output dir).
+      filePath: "TEXT",
+      finishReason: "TEXT",
+      markers: "TEXT",
+      usage: "TEXT",
+      latencyMs: "INTEGER",
+      error: "TEXT",
+      humanScore: "INTEGER",
+      humanNote: "TEXT",
+      scoreUpdatedAt: "TEXT",
+      createdAt: "TEXT NOT NULL",
+    },
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_mers_run ON modelEvalResults(runId)",
+      "CREATE INDEX IF NOT EXISTS idx_mers_model ON modelEvalResults(model)",
+    ],
+  },
+  modelEvalSchedules: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      name: "TEXT NOT NULL",
+      models: "TEXT NOT NULL",
+      promptId: "TEXT NOT NULL",
+      mode: "TEXT NOT NULL",
+      dailyTime: "TEXT",
+      cronExpr: "TEXT",
+      enabled: "INTEGER DEFAULT 1",
+      lastRunAt: "TEXT",
+      lastRunId: "TEXT",
+      lastError: "TEXT",
+      createdAt: "TEXT NOT NULL",
+      updatedAt: "TEXT NOT NULL",
+    },
   },
 };
 

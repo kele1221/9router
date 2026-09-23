@@ -114,7 +114,11 @@ function resolveFormat(targetFormat, model, provider) {
   if (providerFmt) return providerFmt;
   const caps = getCapabilitiesForModel(provider, model);
   const isOpenAIWire = targetFormat === "openai" || targetFormat === "openai-responses";
-  if (caps.thinkingFormat && !(isOpenAIWire && NATIVE_ONLY_FORMATS.has(caps.thinkingFormat))) {
+  // A custom anthropic-compatible connection speaks Claude wire by definition —
+  // capabilities.js pins its thinkingFormat for exactly that reason, so the
+  // OpenAI-wire guard below must not override it.
+  const claudeWire = typeof provider === "string" && provider.startsWith("anthropic-compatible-");
+  if (caps.thinkingFormat && (claudeWire || !(isOpenAIWire && NATIVE_ONLY_FORMATS.has(caps.thinkingFormat)))) {
     return caps.thinkingFormat;
   }
   return FORMAT_TO_NATIVE[targetFormat] || "openai";

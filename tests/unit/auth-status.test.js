@@ -31,6 +31,9 @@ vi.mock("@/lib/auth/dashboardSession", () => ({
   getDashboardAuthSession: mocks.getDashboardAuthSession,
 }));
 
+// The route stamps localNoPassword via the dashboard guard; unrelated here.
+vi.mock("@/dashboardGuard", () => ({ isLocalRequest: () => true }));
+
 const { GET } = await import("../../src/app/api/auth/status/route.js");
 
 describe("GET /api/auth/status", () => {
@@ -47,6 +50,7 @@ describe("GET /api/auth/status", () => {
     const response = await GET();
 
     expect(response.body.authenticated).toBe(true);
+    expect(response.body.localNoPassword).toBe(true);
     expect(mocks.getDashboardAuthSession).toHaveBeenCalledWith("session-token");
   });
 

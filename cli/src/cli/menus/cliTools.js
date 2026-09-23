@@ -1,5 +1,5 @@
 const api = require("../api/client");
-const { pause, confirm } = require("../utils/input");
+const { pause, confirm, prompt, select } = require("../utils/input");
 const { showStatus } = require("../utils/display");
 const { selectModelFromList } = require("../utils/modelSelector");
 const { showMenuWithBack } = require("../utils/menuHelper");
@@ -18,6 +18,17 @@ const CLAUDE_MODEL_TYPES = [
   { id: "sonnet", name: "Sonnet", envKey: "ANTHROPIC_DEFAULT_SONNET_MODEL", defaultValue: "cc/claude-sonnet-4-5-20250929" },
   { id: "opus",   name: "Opus",   envKey: "ANTHROPIC_DEFAULT_OPUS_MODEL",   defaultValue: "cc/claude-opus-4-5-20251101" },
   { id: "haiku",  name: "Haiku",  envKey: "ANTHROPIC_DEFAULT_HAIKU_MODEL",  defaultValue: "cc/claude-haiku-4-5-20251001" },
+];
+
+const HERMES_CONTEXT_OPTIONS = [
+  { label: "Auto-detect", value: null },
+  { label: "64K", value: "64000" },
+  { label: "128K", value: "128000" },
+  { label: "200K", value: "200000" },
+  { label: "256K", value: "256000" },
+  { label: "512K", value: "512000" },
+  { label: "1M", value: "1000000" },
+  { label: "Custom", value: "custom" },
 ];
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -515,11 +526,17 @@ async function showOpenCodeMenu(port, breadcrumb = []) {
 
 // ─── Hermes Agent ─────────────────────────────────────────────────────────────
 
-async function buildHermesHeader() {
-  const result = await api.getCliToolSettings("hermes");
-  if (!result.success) return `  ${COLORS.red}Failed to load settings${COLORS.reset}`;
+function formatHermesContext(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0
+    ? `${parsed.toLocaleString()} tokens`
+    : "Auto-detect";
+}
 
-  const { installed, has9Router, settings } = result.data;
+async function buildHermesHeader(data) {
+  if (!data || data.error) return `  ${COLORS.red}Failed to load settings${COLORS.reset}`;
+
+  const { installed, has9Router, settings } = data;
   if (!installed) return `Status:   ${COLORS.red}✗ Hermes Agent not installed${COLORS.reset}`;
 
   if (!has9Router) {
@@ -533,7 +550,21 @@ async function buildHermesHeader() {
   const lines = [`Status:   ${COLORS.green}✓ Configured${COLORS.reset}`];
   if (model.base_url) lines.push(`Endpoint: ${COLORS.cyan}${model.base_url}${COLORS.reset}`);
   if (model.default)  lines.push(`Model:    ${COLORS.dim}${model.default}${COLORS.reset}`);
+  lines.push(`Context:  ${COLORS.dim}${formatHermesContext(model.context_length)}${COLORS.reset}`);
   return lines.join("\n");
+}
+
+async function selectHermesContextLength(currentValue = null) {
+  const currentLabel = formatHermesContext(currentValue);
+  const optionIndex = await select(
+    `Hermes Context Window (current: ${currentLabel})`,
+    HERMES_CONTEXT_OPTIONS.map((option) => option.label),
+  );
+  const selected = HERMES_CONTEXT_OPTIONS[optionIndex];
+  if (selected.value !== "custom") return selected.value;
+
+  const custom = await prompt("Enter context length (e.g. 128K, 1M; blank for Auto): ");
+  return custom || null;
 }
 
 async function hermesQuickSetup(port) {
@@ -549,8 +580,19 @@ async function hermesQuickSetup(port) {
   const model = await selectModelFromList("Select Hermes Model", "", { excludeCombos: true });
   if (!model) return;
 
-  const result = await api.applyCliToolSettings("hermes", { baseUrl: endpoint, apiKey, model });
+  const contextLength = await selectHermesContextLength();
+  const result = await api.applyCliToolSettings("hermes", { baseUrl: endpoint, apiKey, model, contextLength });
   showStatus(result.success ? "Hermes setup completed!" : `Failed: ${result.error}`, result.success ? "success" : "error");
+  await pause();
+}
+
+async function hermesSetContextLength(currentValue) {
+  const contextLength = await selectHermesContextLength(currentValue);
+  const result = await api.patchCliToolSettings("hermes", { contextLength });
+  showStatus(
+    result.success ? `Hermes context window → ${formatHermesContext(result.data?.contextLength)}` : `Failed: ${result.error}`,
+    result.success ? "success" : "error",
+  );
   await pause();
 }
 
@@ -565,9 +607,19 @@ async function showHermesMenu(port, breadcrumb = []) {
     title: "⚡ Hermes Agent Settings",
     breadcrumb,
     headerContent: buildHermesHeader,
-    refresh: async () => ({}),
+    refresh: async () => {
+      const result = await api.getCliToolSettings("hermes");
+      return result.success ? result.data : { error: result.error };
+    },
     items: [
       { label: "⚡ Quick Setup", action: async () => { await hermesQuickSetup(port); return true; } },
+      {
+        label: (data) => `Context Window: ${formatHermesContext(data?.settings?.model?.context_length)}`,
+        action: async (data) => {
+          await hermesSetContextLength(data?.settings?.model?.context_length);
+          return true;
+        },
+      },
       { label: "Reset to Default", action: async () => { await hermesReset(); return true; } }
     ]
   });

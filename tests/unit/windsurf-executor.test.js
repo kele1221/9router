@@ -165,7 +165,9 @@ describe("WindsurfExecutor class", () => {
     const ex = new WindsurfExecutor();
     expect(ex.provider).toBe("windsurf");
     expect(ex.config).toBeDefined();
-    expect(ex.config.baseUrl).toContain("server.self-serve.windsurf.com");
+    // windsurf is hidden in the registry (no tool-calling support), so the
+    // constructor falls back to the executor's built-in Codeium endpoint.
+    expect(ex.config.baseUrl).toContain("server.codeium.com");
     expect(typeof ex.execute).toBe("function");
   });
 
@@ -187,12 +189,18 @@ describe("WindsurfExecutor class", () => {
 
   it("buildUrl returns the GetChatMessage endpoint", () => {
     const ex = new WindsurfExecutor();
-    expect(ex.buildUrl()).toBe("https://server.self-serve.windsurf.com/exa.language_server_pb.LanguageServerService/GetChatMessage");
+    expect(ex.buildUrl()).toBe("https://server.codeium.com/exa.language_server_pb.LanguageServerService/GetChatMessage");
   });
 
-  it("PROVIDERS.windsurf baseUrl is the chat endpoint (registry in sync)", () => {
-    expect(PROVIDERS.windsurf.baseUrl).toBe(
-      "https://server.self-serve.windsurf.com/exa.language_server_pb.LanguageServerService/GetChatMessage"
+  it("registry file keeps the same chat endpoint while the provider stays hidden", async () => {
+    const { default: windsurfRegistry } = await import(
+      "open-sse/providers/registry/windsurf.js"
     );
+    expect(windsurfRegistry.transport.baseUrl).toBe(
+      "https://server.codeium.com/exa.language_server_pb.LanguageServerService/GetChatMessage"
+    );
+    // Hidden from PROVIDERS: windsurf gRPC skips ToolCallChunk, so the provider
+    // is commented out of providers/registry/index.js on purpose.
+    expect(PROVIDERS.windsurf).toBeUndefined();
   });
 });

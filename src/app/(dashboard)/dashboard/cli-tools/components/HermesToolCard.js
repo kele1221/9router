@@ -7,6 +7,11 @@ import BaseUrlSelect from "./BaseUrlSelect";
 import { rememberEndpoint } from "./cliEndpointPresets";
 import ApiKeySelect from "./ApiKeySelect";
 import { matchKnownEndpoint } from "./cliEndpointMatch";
+import {
+  HERMES_CONTEXT_PRESETS,
+  normalizeHermesContextLength,
+} from "@/lib/hermesConfig";
+import { useModelCaps } from "@/shared/hooks/useModelCaps";
 
 const ENDPOINT = "/api/cli-tools/hermes-settings";
 
@@ -32,11 +37,25 @@ export default function HermesToolCard({
   const [message, setMessage] = useState(null);
   const [selectedApiKey, setSelectedApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
+  const [contextLength, setContextLength] = useState("");
+  const [contextPreset, setContextPreset] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [modelAliases, setModelAliases] = useState({});
   const [showManualConfigModal, setShowManualConfigModal] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
   const hasInitializedModel = useRef(false);
+  const hasInitializedContext = useRef(false);
+  const { getCaps } = useModelCaps();
+
+  function syncContextSelection(value) {
+    const normalized = value ? String(value) : "";
+    setContextLength(normalized);
+    setContextPreset(HERMES_CONTEXT_PRESETS.some((option) => option.value === normalized)
+      ? normalized
+      : normalized
+        ? "custom"
+        : "");
+  }
 
   const currentBaseUrl = hermesStatus?.settings?.model?.base_url || "";
 
@@ -85,11 +104,23 @@ export default function HermesToolCard({
     }
   }, [hermesStatus]);
 
+  useEffect(() => {
+    if (hermesStatus?.installed && !hasInitializedContext.current) {
+      hasInitializedContext.current = true;
+      const configured = hermesStatus.settings?.model?.context_length;
+      syncContextSelection(configured);
+    }
+  }, [hermesStatus]);
+
   const checkStatus = async () => {
     setChecking(true);
     try {
       const res = await fetch(ENDPOINT);
       const data = await res.json();
+      const model = data?.settings?.model;
+      if (model && Object.prototype.hasOwnProperty.call(model, "context_length")) {
+        syncContextSelection(model.context_length);
+      }
       setHermesStatus(data);
     } catch (error) {
       setHermesStatus({ installed: false, error: error.message });
@@ -127,10 +158,14 @@ export default function HermesToolCard({
           baseUrl: getEffectiveBaseUrl(),
           apiKey: keyToUse,
           model: selectedModel,
+          contextLength: contextLength || null,
         }),
       });
       const data = await res.json();
       if (res.ok) {
+        if (Object.prototype.hasOwnProperty.call(data, "contextLength")) {
+          syncContextSelection(data.contextLength);
+        }
         // Remember the endpoint so it stays selectable next time
         rememberEndpoint(getEffectiveBaseUrl(), { tunnelPublicUrl, tailscaleUrl });
         setMessage({ type: "success", text: "Settings applied successfully!" });
@@ -154,6 +189,8 @@ export default function HermesToolCard({
       if (res.ok) {
         setMessage({ type: "success", text: "Settings reset successfully!" });
         setSelectedModel("");
+        setContextLength("");
+        setContextPreset("");
         checkStatus();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to reset settings" });
@@ -166,8 +203,37 @@ export default function HermesToolCard({
   };
 
   const handleModelSelect = (model) => {
+    if (model.value !== selectedModel) {
+      setContextLength("");
+      setContextPreset("");
+    }
     setSelectedModel(model.value);
     setModalOpen(false);
+  };
+
+  const handleModelInputChange = (value) => {
+    if (value !== selectedModel) {
+      setContextLength("");
+      setContextPreset("");
+    }
+    setSelectedModel(value);
+  };
+
+  const handleEndpointChange = (value) => {
+    setCustomBaseUrl(value);
+    setContextLength("");
+    setContextPreset("");
+  };
+
+  const suggestedContext = getCaps(selectedModel)?.contextWindow;
+
+  const getManualContextLength = () => {
+    try {
+      const normalized = normalizeHermesContextLength(contextLength);
+      return Number.isSafeInteger(normalized) ? normalized : null;
+    } catch {
+      return null;
+    }
   };
 
   const getManualConfigs = () => {
@@ -175,7 +241,9 @@ export default function HermesToolCard({
       ? selectedApiKey
       : (!cloudEnabled ? "sk_9router" : "<API_KEY_FROM_DASHBOARD>");
 
-    const yamlContent = `model:\n  default: "${selectedModel || "provider/model-id"}"\n  provider: "custom"\n  base_url: "${getEffectiveBaseUrl()}"\n  api_key: \${OPENAI_API_KEY}\n`;
+    const manualContextLength = getManualContextLength();
+    const contextLine = manualContextLength ? `  context_length: ${manualContextLength}\n` : "";
+    const yamlContent = `model:\n  default: "${selectedModel || "provider/model-id"}"\n  provider: "custom"\n  base_url: "${getEffectiveBaseUrl()}"\n  api_key: \${OPENAI_API_KEY}\n${contextLine}`;
     const envContent = `OPENAI_API_KEY=${keyToUse}\n`;
 
     return [
@@ -241,7 +309,7 @@ export default function HermesToolCard({
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <BaseUrlSelect
                     value={customBaseUrl || getEffectiveBaseUrl()}
-                    onChange={setCustomBaseUrl}
+                    onChange={handleEndpointChange}
                     requiresExternalUrl={tool.requiresExternalUrl}
                     tunnelEnabled={tunnelEnabled}
                     tunnelPublicUrl={tunnelPublicUrl}
@@ -271,10 +339,48 @@ export default function HermesToolCard({
                   <span className="text-xs font-semibold text-text-main sm:text-right sm:text-sm">Default Model</span>
                   <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
                   <div className="relative w-full min-w-0">
-                    <input type="text" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} placeholder="provider/model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
-                    {selectedModel && <button onClick={() => setSelectedModel("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
+                    <input type="text" value={selectedModel} onChange={(e) => handleModelInputChange(e.target.value)} placeholder="provider/model-id" className="w-full min-w-0 pl-2 pr-7 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5" />
+                    {selectedModel && <button onClick={() => handleModelInputChange("")} className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-text-muted hover:text-red-500 rounded transition-colors" title="Clear"><span className="material-symbols-outlined text-[14px]">close</span></button>}
                   </div>
                   <button onClick={() => setModalOpen(true)} disabled={!hasActiveProviders} className={`w-full sm:w-auto rounded border px-2 py-2 text-xs transition-colors sm:py-1.5 whitespace-nowrap sm:shrink-0 ${hasActiveProviders ? "bg-surface border-border text-text-main hover:border-primary cursor-pointer" : "opacity-50 cursor-not-allowed border-border"}`}>Select</button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[8rem_auto_1fr] sm:items-center sm:gap-2">
+                  <div className="sm:text-right">
+                    <span className="text-xs font-semibold text-text-main sm:text-sm">Context Window</span>
+                    <p className="mt-0.5 text-[10px] leading-tight text-text-muted">Total input + output tokens</p>
+                  </div>
+                  <span className="material-symbols-outlined hidden text-text-muted text-[14px] sm:inline">arrow_forward</span>
+                  <div className="flex w-full min-w-0 flex-col gap-1.5 sm:flex-row">
+                    <select
+                      value={contextPreset}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setContextPreset(value);
+                        setContextLength(value === "custom" ? "" : value);
+                      }}
+                      className="w-full min-w-0 px-2 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
+                      aria-label="Hermes context window"
+                    >
+                      {HERMES_CONTEXT_PRESETS.map((option) => (
+                        <option key={option.label} value={option.value}>{option.label}</option>
+                      ))}
+                      <option value="custom">Custom</option>
+                    </select>
+                    {contextPreset === "custom" && (
+                      <input
+                        type="text"
+                        value={contextLength}
+                        onChange={(event) => setContextLength(event.target.value)}
+                        placeholder="e.g. 131072 or 128K"
+                        className="w-full min-w-0 px-2 py-2 bg-surface rounded border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50 sm:py-1.5"
+                        aria-label="Custom Hermes context window"
+                      />
+                    )}
+                  </div>
+                  <p className="text-[10px] leading-tight text-text-muted sm:col-start-3">
+                    Auto lets Hermes detect the model window{suggestedContext ? ` (catalog hint: ${suggestedContext.toLocaleString()} tokens)` : ""}. Minimum 64,000.
+                  </p>
                 </div>
               </div>
 

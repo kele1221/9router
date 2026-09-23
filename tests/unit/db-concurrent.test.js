@@ -29,7 +29,9 @@ describe("DB Concurrency — atomic safety", () => {
     const promises = [];
     for (let i = 0; i < N; i++) {
       promises.push(db.saveRequestUsage({
-        provider: "openai", model: "gpt-4", connectionId: "c1",
+        // Distinct connectionIds: identical entries are deduped on purpose (see
+        // "identical usage writes dedupe" below), which is not what this test checks.
+        provider: "openai", model: "gpt-4", connectionId: `c${i}`,
         tokens: { prompt_tokens: 10, completion_tokens: 5 },
         endpoint: "/v1/chat", status: "ok",
       }));
@@ -43,6 +45,16 @@ describe("DB Concurrency — atomic safety", () => {
 
     const hist = await db.getUsageHistory({ provider: "openai" });
     expect(hist.length).toBe(N);
+  });
+
+  it("identical usage writes dedupe (retry / double-report guard)", async () => {
+    const entry = () => ({
+      provider: "dedupe-prov", model: "dup-model", connectionId: "d1",
+      tokens: { prompt_tokens: 1, completion_tokens: 1 }, status: "ok",
+    });
+    await Promise.all([db.saveRequestUsage(entry()), db.saveRequestUsage(entry()), db.saveRequestUsage(entry())]);
+    const stats = await db.getUsageStats("24h");
+    expect(stats.byProvider["dedupe-prov"].requests).toBe(1);
   });
 
   it("200 parallel saveRequestDetail → all flushed", async () => {
@@ -70,7 +82,8 @@ describe("DB Concurrency — atomic safety", () => {
     const ops = [];
     for (let i = 0; i < 50; i++) {
       ops.push(db.saveRequestUsage({
-        provider: "anthropic", model: `m-${i % 3}`, connectionId: "c2",
+        // One distinct model per write — identical rows would be deduped.
+        provider: "anthropic", model: `m-${i}`, connectionId: "c2",
         tokens: { prompt_tokens: 20 }, status: "ok",
       }));
       ops.push(db.setModelAlias(`a-${i}`, `target-${i}`));
@@ -154,7 +167,8 @@ describe("DB Concurrency — atomic safety", () => {
     const promises = [];
     for (let i = 0; i < N; i++) {
       promises.push(db.saveRequestUsage({
-        provider: "google", model: "gemini-pro", connectionId: "cG",
+        // Distinct per write — identical rows would be deduped before aggregating.
+        provider: "google", model: `gemini-pro-${i}`, connectionId: "cG",
         tokens: { prompt_tokens: 100, completion_tokens: 50 },
         status: "ok",
       }));

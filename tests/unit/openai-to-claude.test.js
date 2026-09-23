@@ -175,6 +175,8 @@ describe("openaiToClaudeResponse", () => {
       id: "chatcmpl-test",
       model: "gpt-test",
       choices: [{
+        // Args are buffered and flushed when the stream finishes.
+        finish_reason: "tool_calls",
         delta: {
           tool_calls: [{
             index: 0,

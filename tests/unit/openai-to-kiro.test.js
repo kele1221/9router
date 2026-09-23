@@ -11,7 +11,16 @@ import { openaiToKiroRequest } from "../../open-sse/translator/request/openai-to
 
 const contentOf = (result) =>
   result.conversationState.currentMessage.userInputMessage.content;
-const systemPromptOf = (result) => result.systemPrompt || "";
+// The thinking/agentic prefix rides inside the first user turn's content: a
+// top-level `systemPrompt` is rejected by CodeWhisperer (400 REQUEST_BODY_INVALID),
+// so the payload no longer carries one.
+const systemPromptOf = (result) =>
+  [
+    result.conversationState.currentMessage.userInputMessage.content || "",
+    ...(result.conversationState.history || []).map(
+      (turn) => turn?.userInputMessage?.content || ""
+    ),
+  ].join("\n");
 
 describe("openaiToKiroRequest", () => {
   describe("basic message conversion", () => {
@@ -568,7 +577,7 @@ describe("openaiToKiroRequest", () => {
       expect(systemPromptOf(result)).toContain("<max_thinking_length>16000</max_thinking_length>");
     });
 
-    it("keeps top-level systemPrompt stable across turns", () => {
+    it("keeps the injected prompt prefix stable across turns", () => {
       const first = openaiToKiroRequest(
         "claude-sonnet-4.6-thinking",
         { messages: [{ role: "user", content: "first" }] },
@@ -582,8 +591,11 @@ describe("openaiToKiroRequest", () => {
         {}
       );
 
-      expect(first.systemPrompt).toBe(second.systemPrompt);
-      expect(first.systemPrompt).not.toContain("Current time");
+      // The stable part of the injected prompt = everything before the
+      // volatile per-request time context.
+      const prefixOf = (result) => systemPromptOf(result).split("[Context: Current time")[0];
+      expect(prefixOf(first)).toBe(prefixOf(second));
+      expect(prefixOf(first)).not.toContain("Current time");
       expect(first.conversationState.currentMessage.userInputMessage.content).toContain("Current time");
     });
 

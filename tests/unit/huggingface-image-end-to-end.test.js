@@ -132,6 +132,7 @@ describe("HuggingFace image generation — end to end", () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 402,
+      headers: { get: () => "application/json" },
       text: async () => JSON.stringify({ error: "You have depleted your monthly included credits." }),
       json: async () => ({ error: "You have depleted your monthly included credits." }),
     });

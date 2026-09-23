@@ -26,7 +26,9 @@ const nextConfig = {
   },
   outputFileTracingRoot: tracingRoot,
   outputFileTracingExcludes: {
-    "*": ["./gitbook/**/*"]
+    // model-eval-output holds locally generated model sources (git-ignored) —
+    // keep it out of the standalone trace so it is never bundled.
+    "*": ["./gitbook/**/*", "./model-eval-output/**/*"]
   },
   images: {
     unoptimized: true

@@ -29,5 +29,10 @@ export async function register() {
 
     const { startModelCatalogSync } = await import("@/lib/modelCatalog/sync.js");
     startModelCatalogSync();
+
+    // Scheduled capability evaluations must fire without an open dashboard, so
+    // they start here rather than in bootstrap.js's layout-triggered initializeApp.
+    const { startModelEvalScheduler } = await import("@/lib/modelEval/scheduler.js");
+    startModelEvalScheduler();
   }
 }

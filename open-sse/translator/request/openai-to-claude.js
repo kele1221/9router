@@ -253,6 +253,11 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map()) {
       }
     }
   } else if (msg.role === ROLE.ASSISTANT) {
+    // Prior-turn reasoning echoed by OpenAI-format clients → thinking block.
+    // Unsigned blocks are sanitized downstream in prepareClaudeRequest.
+    if (typeof msg.reasoning_content === "string" && msg.reasoning_content.trim()) {
+      blocks.push({ type: CLAUDE_BLOCK.THINKING, thinking: msg.reasoning_content });
+    }
     if (Array.isArray(msg.content)) {
       for (const part of msg.content) {
         if (part.type === OPENAI_BLOCK.TEXT && part.text) {

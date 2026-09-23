@@ -9,6 +9,7 @@ import { useModelCaps } from "@/shared/hooks/useModelCaps";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, AI_PROVIDERS, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, getProviderAlias } from "@/shared/constants/providers";
 import { fetchSuggestedModels } from "@/shared/utils/providerModelsFetcher";
+import { isComboFullyDisabled } from "@/shared/utils/modelAvailability";
 
 // Provider order: OAuth first, then Free Tier, then API Key (matches dashboard/providers)
 const PROVIDER_ORDER = [
@@ -447,13 +448,15 @@ export default function ModelSelectModal({
     return groups;
   }, [filteredActiveProviders, modelAliases, allProviders, providerNodes, customModels, disabledModels, kindFilter, activeProviders, cursorModels, clineModels, clinepassModels, suggestedModels]);
 
-  // Filter combos by search query (and hide combos when kindFilter is set — combos are LLM-only by design)
+  // Filter combos by search query (and hide combos when kindFilter is set — combos are LLM-only by design).
+  // Combos with nothing left to route to (all members disabled) are hidden too.
   const filteredCombos = useMemo(() => {
     if (kindFilter || capFilter) return [];
-    if (!searchQuery.trim()) return combos;
+    const usable = combos.filter((c) => !isComboFullyDisabled(c, disabledModels));
+    if (!searchQuery.trim()) return usable;
     const query = searchQuery.toLowerCase();
-    return combos.filter(c => c.name.toLowerCase().includes(query));
-  }, [combos, searchQuery, kindFilter]);
+    return usable.filter(c => c.name.toLowerCase().includes(query));
+  }, [combos, searchQuery, kindFilter, capFilter, disabledModels]);
 
   // Sort models alphabetically, with added models floated to top
   const sortModels = (models) => {

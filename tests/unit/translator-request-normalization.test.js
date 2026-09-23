@@ -5,9 +5,10 @@ import { translateRequest } from "../../open-sse/translator/index.js";
 import { claudeToOpenAIRequest } from "../../open-sse/translator/request/claude-to-openai.js";
 import { filterToOpenAIFormat } from "../../open-sse/translator/formats/openai.js";
 import { parseSSELine } from "../../open-sse/utils/streamHelpers.js";
+import { stripUnsupportedParams } from "../../open-sse/translator/concerns/paramSupport.js";
 
 describe("request normalization", () => {
-  it("claudeToOpenAIRequest flattens text-only content arrays into string", () => {
+  it("claudeToOpenAIRequest keeps text-only content arrays (flattening is provider-specific)", () => {
     const body = {
       messages: [
         {
@@ -21,7 +22,24 @@ describe("request normalization", () => {
     };
 
     const result = claudeToOpenAIRequest("gpt-oss:120b", body, true);
-    expect(result.messages[0].content).toBe("hi\nthere");
+    expect(result.messages[0].content).toStrictEqual([
+      { type: "text", text: "hi" },
+      { type: "text", text: "there" },
+    ]);
+  });
+
+  it("flattens content to a plain string only for providers whose rules require it", () => {
+    const cfBody = {
+      messages: [{ role: "user", content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] }],
+    };
+    stripUnsupportedParams("cloudflare-ai", "any-model", cfBody);
+    expect(cfBody.messages[0].content).toBe("ab");
+
+    const openaiBody = {
+      messages: [{ role: "user", content: [{ type: "text", text: "a" }] }],
+    };
+    stripUnsupportedParams("openai", "gpt-4o", openaiBody);
+    expect(Array.isArray(openaiBody.messages[0].content)).toBe(true);
   });
 
   it("claudeToOpenAIRequest preserves multimodal arrays", () => {
@@ -62,10 +80,13 @@ describe("request normalization", () => {
     };
 
     const result = filterToOpenAIFormat(JSON.parse(JSON.stringify(body)));
-    expect(result.messages[0].content).toBe("a\nb");
+    expect(result.messages[0].content).toStrictEqual([
+      { type: "text", text: "a" },
+      { type: "text", text: "b" },
+    ]);
   });
 
-  it("translateRequest keeps /v1/messages Claude->OpenAI text payloads string-safe", () => {
+  it("translateRequest keeps /v1/messages Claude->OpenAI text payload blocks intact", () => {
     const body = {
       model: "ollama/gpt-oss:120b",
       system: [{ type: "text", text: "You are helpful." }],
@@ -92,8 +113,10 @@ describe("request normalization", () => {
     );
 
     const userMessage = result.messages.find((m) => m.role === "user");
-    expect(typeof userMessage.content).toBe("string");
-    expect(userMessage.content).toBe("hello\nworld");
+    expect(userMessage.content).toStrictEqual([
+      { type: "text", text: "hello" },
+      { type: "text", text: "world" },
+    ]);
   });
 
   it("translateRequest strips unsupported Anthropic output_config for MiniMax Claude-compatible endpoints", () => {
@@ -171,7 +194,9 @@ describe("request normalization", () => {
       done: false,
     });
 
-    const parsed = parseSSELine(raw);
+    // Raw NDJSON (no "data:" prefix) is parsed only when the caller says the
+    // stream is the Ollama NDJSON format.
+    const parsed = parseSSELine(raw, FORMATS.OLLAMA);
     expect(parsed).toEqual({
       model: "gpt-oss:120b",
       message: { role: "assistant", content: "hello" },

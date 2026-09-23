@@ -6,6 +6,14 @@ import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import {
+  HermesContextLengthError,
+  normalizeHermesContextLength,
+  parseHermesModelBlock,
+  removeHermesModelBlock,
+  resolveHermesContextLength,
+  upsertHermesModelBlock,
+} from "@/lib/hermesConfig";
 
 const execAsync = promisify(exec);
 
@@ -16,47 +24,12 @@ const getHermesDir = () => path.join(os.homedir(), ".hermes");
 const getHermesConfigPath = () => path.join(getHermesDir(), "config.yaml");
 const getHermesEnvPath = () => path.join(getHermesDir(), ".env");
 
-// Match top-level "model:" block (until next non-indented, non-empty line)
-const MODEL_BLOCK_RE = /^model:[ \t]*\r?\n((?:[ \t]+.*\r?\n?|[ \t]*\r?\n)*)/m;
-
-const buildModelBlock = (model, baseUrl) =>
-  `model:\n  default: "${model}"\n  provider: "custom"\n  base_url: "${baseUrl}"\n  api_key: \${OPENAI_API_KEY}\n`;
-
-// Parse current model block back to fields (best-effort, simple key:value)
-const parseModelBlock = (yaml) => {
-  const match = yaml.match(MODEL_BLOCK_RE);
-  if (!match) return null;
-  const body = match[1] || "";
-  const get = (key) => {
-    const m = body.match(new RegExp(`^[ \\t]+${key}:[ \\t]*["']?([^"'\\r\\n]+)["']?`, "m"));
-    return m ? m[1].trim() : null;
-  };
-  return {
-    default: get("default"),
-    provider: get("provider"),
-    base_url: get("base_url"),
-    api_key: get("api_key"),
-  };
-};
-
-const upsertModelBlock = (yaml, newBlock) => {
-  if (MODEL_BLOCK_RE.test(yaml)) return yaml.replace(MODEL_BLOCK_RE, newBlock);
-  return yaml.length > 0 ? `${newBlock}\n${yaml}` : newBlock;
-};
-
-const removeModelBlock = (yaml) => yaml.replace(MODEL_BLOCK_RE, "").replace(/^\n+/, "");
-
 // .env helpers — upsert/remove single KEY=VALUE line
 const upsertEnvVar = (envText, key, value) => {
   const re = new RegExp(`^${key}=.*$`, "m");
   const line = `${key}=${value}`;
   if (re.test(envText)) return envText.replace(re, line);
   return envText.length > 0 && !envText.endsWith("\n") ? `${envText}\n${line}\n` : `${envText}${line}\n`;
-};
-
-const removeEnvVar = (envText, key) => {
-  const re = new RegExp(`^${key}=.*\\r?\\n?`, "m");
-  return envText.replace(re, "");
 };
 
 const checkHermesInstalled = async () => {
@@ -106,7 +79,7 @@ export async function GET() {
       return NextResponse.json({ installed: false, settings: null, message: "Hermes Agent is not installed" });
     }
     const yaml = await readConfigYaml();
-    const model = parseModelBlock(yaml);
+    const model = parseHermesModelBlock(yaml);
     return NextResponse.json({
       installed: true,
       settings: { model },
@@ -121,19 +94,44 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { baseUrl, apiKey, model } = await request.json();
+    const body = await request.json();
+    const { baseUrl, apiKey, model } = body;
     if (!baseUrl || !model) {
       return NextResponse.json({ error: "baseUrl and model are required" }, { status: 400 });
+    }
+
+    const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+
+    const existingYaml = await readConfigYaml();
+    const existingModel = parseHermesModelBlock(existingYaml);
+    const hasContextLength = Object.prototype.hasOwnProperty.call(body, "contextLength");
+    let contextLength;
+    try {
+      contextLength = resolveHermesContextLength({
+        value: body.contextLength,
+        hasValue: hasContextLength,
+        existingModel,
+        model,
+        provider: "custom",
+        baseUrl: normalizedBaseUrl,
+      });
+    } catch (error) {
+      if (error instanceof HermesContextLengthError) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
     }
 
     const dir = getHermesDir();
     await fs.mkdir(dir, { recursive: true });
 
-    const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
-
-    // Update config.yaml — replace/insert model: block, keep everything else
-    const existingYaml = await readConfigYaml();
-    const newYaml = upsertModelBlock(existingYaml, buildModelBlock(model, normalizedBaseUrl));
+    const newYaml = upsertHermesModelBlock(existingYaml, {
+      default: model,
+      provider: "custom",
+      base_url: normalizedBaseUrl,
+      api_key: "${OPENAI_API_KEY}",
+      context_length: contextLength,
+    });
     await fs.writeFile(getHermesConfigPath(), newYaml);
 
     // Update .env — upsert OPENAI_API_KEY only when caller provides one
@@ -147,10 +145,49 @@ export async function POST(request) {
       success: true,
       message: "Hermes settings applied successfully!",
       configPath: getHermesConfigPath(),
+      contextLength: contextLength === undefined ? existingModel?.context_length ?? null : contextLength,
     });
   } catch (error) {
     console.log("Error updating hermes settings:", error);
     return NextResponse.json({ error: "Failed to update hermes settings" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request) {
+  try {
+    const body = await request.json();
+    if (!Object.prototype.hasOwnProperty.call(body, "contextLength")) {
+      return NextResponse.json({ error: "contextLength is required" }, { status: 400 });
+    }
+
+    let contextLength;
+    try {
+      contextLength = normalizeHermesContextLength(body.contextLength);
+    } catch (error) {
+      if (error instanceof HermesContextLengthError) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
+    }
+
+    const existingYaml = await readConfigYaml();
+    const existingModel = parseHermesModelBlock(existingYaml);
+    if (!existingModel?.default || !existingModel?.base_url) {
+      return NextResponse.json({ error: "Hermes 9Router model configuration is not set" }, { status: 400 });
+    }
+
+    const newYaml = upsertHermesModelBlock(existingYaml, { context_length: contextLength });
+    await fs.writeFile(getHermesConfigPath(), newYaml);
+
+    return NextResponse.json({
+      success: true,
+      message: "Hermes context length updated successfully!",
+      configPath: getHermesConfigPath(),
+      contextLength,
+    });
+  } catch (error) {
+    console.log("Error updating hermes context length:", error);
+    return NextResponse.json({ error: "Failed to update hermes context length" }, { status: 500 });
   }
 }
 
@@ -166,7 +203,7 @@ export async function DELETE() {
       }
       throw error;
     }
-    const newYaml = removeModelBlock(yaml);
+    const newYaml = removeHermesModelBlock(yaml);
     await fs.writeFile(configPath, newYaml);
     return NextResponse.json({ success: true, message: `${PROVIDER_NAME} model block removed` });
   } catch (error) {

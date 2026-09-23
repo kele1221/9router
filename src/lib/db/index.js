@@ -67,6 +67,16 @@ export {
   saveRequestDetail, getRequestDetails, getRequestDetailById, getDistinctProviders,
 } from "./repos/requestDetailsRepo.js";
 
+// Model capability evaluation
+export {
+  getEvalPrompts, getEvalPromptById, createEvalPrompt, updateEvalPrompt, deleteEvalPrompt,
+  upsertEvalPromptOverride,
+  createEvalRun, updateEvalRun, getEvalRunById, getEvalRuns, deleteEvalRun,
+  createEvalResult, updateEvalResult, getEvalResultById, getEvalResultsByRun, getEvalResultsByModel, setEvalResultScore,
+  getEvalScoreRows,
+  getEvalSchedules, getEvalScheduleById, createEvalSchedule, updateEvalSchedule, deleteEvalSchedule,
+} from "./repos/modelEvalRepo.js";
+
 // Export/import full DB
 export async function exportDb() {
   const db = await getAdapter();

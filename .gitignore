@@ -92,6 +92,9 @@ graphify-out/*
 9router-*
 
 # Local sensitive / temp files
+# Generated model-eval output (local-only, never committed or shipped)
+/model-eval-output/
+
 .engine-token.txt
 .tmp-prov.json
 .tmp-providers.json

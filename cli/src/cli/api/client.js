@@ -363,7 +363,7 @@ async function deleteCombo(id) {
 
 /**
  * Get CLI tool settings
- * @param {string} tool - Tool name: claude | codex | droid | openclaw
+ * @param {string} tool - Tool name: claude | codex | droid | openclaw | hermes
  * @returns {Promise<Object>} { success, data: { installed, has9Router, ... } }
  */
 async function getCliToolSettings(tool) {
@@ -372,7 +372,7 @@ async function getCliToolSettings(tool) {
 
 /**
  * Apply CLI tool settings (POST)
- * @param {string} tool - Tool name: claude | codex | droid | openclaw
+ * @param {string} tool - Tool name: claude | codex | droid | openclaw | hermes
  * @param {Object} body - Payload depends on tool
  * @returns {Promise<Object>} { success, data }
  */
@@ -381,8 +381,18 @@ async function applyCliToolSettings(tool, body) {
 }
 
 /**
+ * Partially update CLI tool settings (PATCH)
+ * @param {string} tool - Tool name
+ * @param {Object} body - Partial payload; Hermes accepts { contextLength }
+ * @returns {Promise<Object>} { success, data }
+ */
+async function patchCliToolSettings(tool, body) {
+  return makeRequest("PATCH", `/api/cli-tools/${tool}-settings`, body);
+}
+
+/**
  * Reset CLI tool settings (DELETE)
- * @param {string} tool - Tool name: claude | codex | droid | openclaw
+ * @param {string} tool - Tool name: claude | codex | droid | openclaw | hermes
  * @returns {Promise<Object>} { success, data }
  */
 async function resetCliToolSettings(tool) {
@@ -531,6 +541,7 @@ module.exports = {
   // CLI Tools
   getCliToolSettings,
   applyCliToolSettings,
+  patchCliToolSettings,
   resetCliToolSettings,
 
   // Settings

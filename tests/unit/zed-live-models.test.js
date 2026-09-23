@@ -1,9 +1,9 @@
 // Route-level acceptance for the Zed live-model wiring:
 //   GET /api/providers/[connectionId]/models  →  resolveZedModels  →  UI rows
-// RUN WITH AN ISOLATED DB:  DATA_DIR=$(mktemp -d) npx vitest run ...
+// Runs against a throwaway DATA_DIR (tests/setup/isolatedDataDir.js) — never the live DB.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { GET } from "@/app/api/providers/[id]/models/route.js";
-import { createProviderConnection } from "@/models/index.js";
+import { createProviderConnection, deleteProviderConnection } from "@/models/index.js";
 
 // Transport stub BELOW resolveZedModels: proxyAwareFetch captures the native
 // fetch at import time, so stubbing globalThis.fetch cannot intercept it.
@@ -68,12 +68,16 @@ beforeEach(() => {
   stub.mode = "ok";
   stub.calls.length = 0;
 });
-afterEach(() => {
+const createdIds = [];
+afterEach(async () => {
   vi.restoreAllMocks();
+  await Promise.all(
+    createdIds.splice(0).map((id) => deleteProviderConnection(id).catch(() => {}))
+  );
 });
 
 async function seedZed(n) {
-  return createProviderConnection({
+  const conn = await createProviderConnection({
     provider: "zed",
     authType: "oauth",
     accessToken: `tok-live-${n}-${Date.now()}`,
@@ -81,6 +85,8 @@ async function seedZed(n) {
     providerSpecificData: { userId: `u-${n}`, systemId: `sys-${n}` },
     testStatus: "active",
   });
+  createdIds.push(conn.id);
+  return conn;
 }
 
 async function getModels(connectionId) {
@@ -159,6 +165,7 @@ describe("criterion 5 (guard) — unsupported provider unchanged", () => {
     // createProviderConnection may reject unknown providers; either way the
     // route must not have gained a zed-shaped branch for others.
     if (!conn) return;
+    createdIds.push(conn.id);
     const res = await getModels(conn.id);
     expect(res.status).toBe(400);
   });

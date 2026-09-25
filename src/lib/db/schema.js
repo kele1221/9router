@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 5;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -160,6 +160,8 @@ export const TABLES = {
       id: "TEXT PRIMARY KEY",
       name: "TEXT NOT NULL",
       content: "TEXT NOT NULL",
+      evaluationType: "TEXT",
+      expectedAnswer: "TEXT",
       createdAt: "TEXT NOT NULL",
       updatedAt: "TEXT NOT NULL",
     },
@@ -171,9 +173,12 @@ export const TABLES = {
       promptName: "TEXT",
       // Snapshot: editing/deleting a prompt must not rewrite history.
       promptContent: "TEXT NOT NULL",
+      evaluationType: "TEXT",
+      expectedAnswer: "TEXT",
       source: "TEXT NOT NULL",
       scheduleId: "TEXT",
       models: "TEXT NOT NULL",
+      thinkingEfforts: "TEXT",
       status: "TEXT NOT NULL",
       error: "TEXT",
       startedAt: "TEXT NOT NULL",
@@ -190,6 +195,7 @@ export const TABLES = {
       runId: "TEXT NOT NULL",
       model: "TEXT NOT NULL",
       provider: "TEXT",
+      thinkingEffort: "TEXT",
       status: "TEXT NOT NULL",
       code: "TEXT",
       rawText: "TEXT",
@@ -203,6 +209,7 @@ export const TABLES = {
       humanScore: "INTEGER",
       humanNote: "TEXT",
       scoreUpdatedAt: "TEXT",
+      autoEvaluation: "TEXT",
       createdAt: "TEXT NOT NULL",
     },
     indexes: [
@@ -215,6 +222,7 @@ export const TABLES = {
       id: "TEXT PRIMARY KEY",
       name: "TEXT NOT NULL",
       models: "TEXT NOT NULL",
+      thinkingEfforts: "TEXT",
       promptId: "TEXT NOT NULL",
       mode: "TEXT NOT NULL",
       dailyTime: "TEXT",

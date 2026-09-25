@@ -31,6 +31,19 @@ describe("model eval repository", () => {
     expect(await repo.getEvalPromptById(created.id)).toBeNull();
   });
 
+  it("persists arithmetic prompt and run snapshots while old rows default to visual", async () => {
+    const prompt = await repo.createEvalPrompt({ name: "算术", content: "1 + 1", evaluationType: "arithmetic", expectedAnswer: "2.0" });
+    expect(prompt).toMatchObject({ evaluationType: "arithmetic", expectedAnswer: "2" });
+    const run = await repo.createEvalRun({ promptId: prompt.id, promptName: prompt.name, promptContent: prompt.content, evaluationType: prompt.evaluationType, expectedAnswer: prompt.expectedAnswer, source: "manual", models: ["math/a"] });
+    expect(run).toMatchObject({ evaluationType: "arithmetic", expectedAnswer: "2" });
+    const result = await repo.createEvalResult({ runId: run.id, model: "math/a", provider: "math" });
+    const graded = await repo.updateEvalResult(result.id, { status: "ok", rawText: "2", autoEvaluation: { verdict: "correct", expectedAnswer: "2", actualAnswer: "2", normalizedAnswer: "2" } });
+    expect(graded.autoEvaluation.verdict).toBe("correct");
+    expect((await repo.getEvalScoreRows({ model: "math/a" }))[0]).toMatchObject({ evaluationType: "arithmetic", autoEvaluation: { verdict: "correct" } });
+    await repo.deleteEvalRun(run.id);
+    await repo.deleteEvalPrompt(prompt.id);
+  });
+
   it("stores a built-in prompt override under the built-in id and restores on delete", async () => {
     const builtinId = "builtin:pelican-svg-bike";
     const override = await repo.upsertEvalPromptOverride({ id: builtinId, name: "我的鹈鹕", content: "画鹈鹕，翅膀要动" });
@@ -52,12 +65,15 @@ describe("model eval repository", () => {
       promptContent: "画鹈鹕",
       source: "manual",
       models: ["a/b", "c/d"],
+      thinkingEfforts: ["none", "high"],
     });
     expect(run.status).toBe("running");
     expect(run.models).toEqual(["a/b", "c/d"]);
+    expect(run.thinkingEfforts).toEqual(["none", "high"]);
 
-    const result = await repo.createEvalResult({ runId: run.id, model: "a/b", provider: "a" });
+    const result = await repo.createEvalResult({ runId: run.id, model: "a/b", provider: "a", thinkingEffort: "high" });
     expect(result.status).toBe("pending");
+    expect(result.thinkingEffort).toBe("high");
 
     const finished = await repo.updateEvalResult(result.id, {
       status: "ok",
@@ -117,12 +133,14 @@ describe("model eval repository", () => {
     const schedule = await repo.createEvalSchedule({
       name: "每小时巡检",
       models: ["a/b"],
+      thinkingEfforts: ["none", "low"],
       promptId: "builtin:pelican-svg-bike",
       mode: "cron",
       cronExpr: "0 * * * *",
     });
     expect(schedule.enabled).toBe(true);
     expect(schedule.mode).toBe("cron");
+    expect(schedule.thinkingEfforts).toEqual(["none", "low"]);
 
     const toggled = await repo.updateEvalSchedule(schedule.id, { enabled: false, lastRunId: "run-1", lastError: "prompt-missing" });
     expect(toggled.enabled).toBe(false);

@@ -14,19 +14,19 @@ afterAll(() => {
 });
 
 describe("generated file naming", () => {
-  it("builds 模型名-测试提示-时间戳", () => {
+  it("builds 模型名-思考深度-测试提示-时间戳", () => {
     expect(buildResultFileName({ model: "openrouter/z-ai/glm-5.3", promptName: "SVG 鹈鹕骑自行车动画", date }))
-      .toBe("openrouter-z-ai-glm-5.3-SVG-鹈鹕骑自行车动画-20260923-140509.html");
+      .toBe("openrouter-z-ai-glm-5.3-none-SVG-鹈鹕骑自行车动画-20260923-140509.html");
   });
 
   it("strips path separators and illegal characters", () => {
     const name = buildResultFileName({ model: "a:b*c?d", promptName: "x/y\\z", date });
-    expect(name).toBe("a-b-c-d-x-y-z-20260923-140509.html");
+    expect(name).toBe("a-b-c-d-none-x-y-z-20260923-140509.html");
     expect(name).not.toMatch(/[\\/:*?"<>|]/);
   });
 
   it("falls back when a part is empty", () => {
-    expect(buildResultFileName({ model: "", promptName: "", date })).toBe("model-prompt-20260923-140509.html");
+    expect(buildResultFileName({ model: "", promptName: "", date })).toBe("model-none-prompt-20260923-140509.html");
   });
 
   it("formats the timestamp as YYYYMMDD-HHmmss", () => {
@@ -37,13 +37,18 @@ describe("generated file naming", () => {
 describe("result file writing", () => {
   it("writes html files into the configured directory", () => {
     const file = writeResultFile({ model: "kiro/claude-x", promptName: "蒸汽火车", code: "<html><body>hi</body></html>", date });
-    expect(file).toBe(path.join(tmpDir, "kiro-claude-x-蒸汽火车-20260923-140509.html"));
+    expect(file).toBe(path.join(tmpDir, "kiro-claude-x-none-蒸汽火车-20260923-140509.html"));
     expect(fs.readFileSync(file, "utf8")).toBe("<html><body>hi</body></html>");
   });
 
   it("uses the svg extension for bare svg output", () => {
     const file = writeResultFile({ model: "m/n", promptName: "p", code: "<svg><rect/></svg>", date });
     expect(file.endsWith(".svg")).toBe(true);
+  });
+
+  it("keeps different thinking levels in distinct filenames", () => {
+    expect(buildResultFileName({ model: "m/n", promptName: "p", thinkingEffort: "high", date }))
+      .toBe("m-n-high-p-20260923-140509.html");
   });
 
   it("suffixes instead of overwriting on a name collision", () => {

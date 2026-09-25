@@ -40,6 +40,15 @@ describe("eval leaderboard aggregation", () => {
     expect(entry).toMatchObject({ okRate: 0, svgRate: null, animRate: null, avgScore: 10 });
   });
 
+  it("keeps arithmetic correctness independent from visual metrics and scores", () => {
+    const [entry] = buildLeaderboard([
+      row("a/b", { score: 80 }),
+      { ...row("a/b", { score: 0, markers: null }), evaluationType: "arithmetic", autoEvaluation: { verdict: "correct" } },
+      { ...row("a/b", { score: 0, markers: null }), evaluationType: "arithmetic", autoEvaluation: { verdict: "invalid" } },
+    ]);
+    expect(entry).toMatchObject({ evaluations: 1, scoreCount: 1, avgScore: 80, okRate: 100, svgRate: 100, animRate: 100, arithmeticCorrectCount: 1, arithmeticEvaluatedCount: 2, arithmeticCorrectRate: 50 });
+  });
+
   it("returns an empty list for no rows", () => {
     expect(buildLeaderboard([])).toEqual([]);
   });

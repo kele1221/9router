@@ -13,6 +13,9 @@ const MODES = [
 ];
 
 const emptyDraft = { id: null, name: "", models: [], promptId: "", mode: "daily", dailyTime: "09:00", cronExpr: "", enabled: true };
+const THINKING_EFFORTS = [
+  { value: "none", label: "不思考" }, { value: "low", label: "低" }, { value: "medium", label: "中" }, { value: "high", label: "高" },
+];
 
 function describe(schedule) {
   if (schedule.mode === "hourly") return "每小时执行一次";
@@ -48,7 +51,7 @@ export default function ScheduleTab({ activeProviders, modelAliases, prompts, on
 
   const openNew = () => {
     const defaultPrompt = prompts.find((p) => p.builtin)?.id || prompts[0]?.id || "";
-    setDraft({ ...emptyDraft, promptId: defaultPrompt });
+    setDraft({ ...emptyDraft, promptId: defaultPrompt, thinkingEfforts: ["none"] });
   };
 
   const save = async () => {
@@ -58,6 +61,7 @@ export default function ScheduleTab({ activeProviders, modelAliases, prompts, on
       const payload = {
         name: draft.name,
         models: draft.models,
+        thinkingEfforts: draft.thinkingEfforts || ["none"],
         promptId: draft.promptId,
         mode: draft.mode,
         dailyTime: draft.mode === "daily" ? draft.dailyTime : null,
@@ -137,7 +141,7 @@ export default function ScheduleTab({ activeProviders, modelAliases, prompts, on
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-text-main truncate">{schedule.name}</p>
                 <p className="text-[11px] text-text-muted">
-                  {describe(schedule)} · {schedule.models.length} 个模型
+                  {describe(schedule)} · {schedule.models.length} 个模型 · {(schedule.thinkingEfforts || ["none"]).join(" / ")}
                   {schedule.lastRunAt ? ` · 上次 ${new Date(schedule.lastRunAt).toLocaleString()}` : " · 尚未执行"}
                   {schedule.lastError ? ` · 异常：${schedule.lastError}` : ""}
                 </p>
@@ -213,6 +217,20 @@ export default function ScheduleTab({ activeProviders, modelAliases, prompts, on
             </div>
 
             <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-text-main">思考深度</p>
+              <div className="flex flex-wrap gap-2">
+                {THINKING_EFFORTS.map((effort) => {
+                  const active = (draft.thinkingEfforts || ["none"]).includes(effort.value);
+                  return <button key={effort.value} type="button" onClick={() => {
+                    const current = draft.thinkingEfforts || ["none"];
+                    const next = active ? (current.length === 1 ? current : current.filter((value) => value !== effort.value)) : [...current, effort.value];
+                    setDraft({ ...draft, thinkingEfforts: next });
+                  }} className={`rounded-[8px] px-3 py-1.5 text-xs font-medium transition-colors ${active ? "bg-brand-500/15 text-primary" : "bg-surface-2 text-text-muted hover:text-text-main"}`}>{effort.label}</button>;
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-text-main">Prompt</p>
               <select
                 value={draft.promptId || ""}
@@ -221,7 +239,7 @@ export default function ScheduleTab({ activeProviders, modelAliases, prompts, on
               >
                 <option value="" disabled>选择 Prompt</option>
                 {prompts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.builtin ? "内置" : "自定义"} · {p.name}</option>
+                  <option key={p.id} value={p.id}>{p.builtin ? "内置" : "自定义"} · {p.evaluationType === "arithmetic" ? "算术" : "可视化"} · {p.name}</option>
                 ))}
               </select>
             </div>

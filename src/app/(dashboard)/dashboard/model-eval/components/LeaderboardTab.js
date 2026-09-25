@@ -109,6 +109,8 @@ export default function LeaderboardTab({ onOpenModelPreviews, showNotice }) {
                   <SortHeader column="okRate" align="right">成功率</SortHeader>
                   <SortHeader column="svgRate" align="right">含 SVG</SortHeader>
                   <SortHeader column="animRate" align="right">含动画</SortHeader>
+                  <SortHeader column="arithmeticCorrectCount" align="right">算术答对</SortHeader>
+                  <SortHeader column="arithmeticCorrectRate" align="right">算术正确率</SortHeader>
                   <SortHeader column="avgLatencyMs" align="right">平均耗时</SortHeader>
                   <SortHeader column="lastAt">最近评测</SortHeader>
                 </tr>
@@ -140,6 +142,8 @@ export default function LeaderboardTab({ onOpenModelPreviews, showNotice }) {
                     <td className="py-2 pr-3 text-right text-text-muted">{pct(row.okRate)}</td>
                     <td className="py-2 pr-3 text-right text-text-muted">{pct(row.svgRate)}</td>
                     <td className="py-2 pr-3 text-right text-text-muted">{pct(row.animRate)}</td>
+                    <td className="py-2 pr-3 text-right text-text-muted">{row.arithmeticCorrectCount}/{row.arithmeticEvaluatedCount}</td>
+                    <td className="py-2 pr-3 text-right text-text-muted">{pct(row.arithmeticCorrectRate)}</td>
                     <td className="py-2 pr-3 text-right text-text-muted">{row.avgLatencyMs ? `${(row.avgLatencyMs / 1000).toFixed(1)}s` : "—"}</td>
                     <td className="py-2 text-text-muted">{row.lastAt ? new Date(row.lastAt).toLocaleString() : "—"}</td>
                   </tr>

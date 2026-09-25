@@ -69,7 +69,7 @@ export default function HistoryTab({ onOpenRun, showNotice }) {
             <div className="min-w-0 flex-1">
               <p className="text-sm text-text-main truncate" title={run.promptName}>{run.promptName || "（未命名 Prompt）"}</p>
               <p className="text-[11px] text-text-muted">
-                {new Date(run.startedAt).toLocaleString()} · {run.models.length} 个模型 · {run.source === "schedule" ? "定时" : "手动"}
+                {new Date(run.startedAt).toLocaleString()} · {run.models.length} 个模型 · {run.evaluationType === "arithmetic" ? "算术答题" : "可视化代码"} · {run.source === "schedule" ? "定时" : "手动"}
               </p>
             </div>
             <Button size="sm" variant="ghost" icon="visibility" onClick={() => open(run)}>查看</Button>

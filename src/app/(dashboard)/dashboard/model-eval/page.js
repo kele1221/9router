@@ -96,12 +96,12 @@ export default function ModelEvalPage() {
     return () => clearInterval(timer);
   }, [run, refreshRun]);
 
-  const startRun = useCallback(async ({ models: selected, promptId }) => {
+  const startRun = useCallback(async ({ models: selected, promptId, thinkingEfforts }) => {
     try {
       const res = await fetch("/api/model-eval/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ models: selected, promptId }),
+        body: JSON.stringify({ models: selected, promptId, thinkingEfforts }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -111,6 +111,7 @@ export default function ModelEvalPage() {
       setRun(data.run);
       setResults([]);
       setTab("test");
+      if (data.skipped?.length) showNotice(`已跳过 ${data.skipped.length} 个不支持的模型与思考深度组合`);
       await refreshRun(data.run.id);
       return true;
     } catch (err) {
@@ -184,7 +185,7 @@ export default function ModelEvalPage() {
                 模型能力测试
               </h1>
               <p className="text-sm text-text-muted mt-1">
-                用同一组可视化代码 Prompt 批量跑模型，内嵌渲染各自生成的 HTML，人工打分对比。
+                用同一题目批量跑模型：可视化代码可预览并人工评分，算术答题自动判定数值答案。
               </p>
             </div>
             <SegmentedControl options={TABS} value={tab} onChange={setTab} />

@@ -3,6 +3,7 @@ import {
   deleteEvalPrompt, getEvalPromptById, updateEvalPrompt, upsertEvalPromptOverride,
 } from "@/lib/db/index.js";
 import { findBuiltinPrompt, isBuiltinPromptId } from "@/shared/constants/evalPrompts.js";
+import { validatePromptEvaluation } from "@/lib/modelEval/arithmetic.js";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +22,15 @@ export async function PATCH(request, { params }) {
     const content = body.content !== undefined ? String(body.content).trim() : existing.content;
     if (!name) return NextResponse.json({ error: "名称不能为空" }, { status: 400 });
     if (!content) return NextResponse.json({ error: "Prompt 内容不能为空" }, { status: 400 });
+    const evaluation = validatePromptEvaluation({
+      evaluationType: body.evaluationType !== undefined ? body.evaluationType : existing.evaluationType,
+      expectedAnswer: body.expectedAnswer !== undefined ? body.expectedAnswer : existing.expectedAnswer,
+    });
+    if (evaluation.error) return NextResponse.json({ error: evaluation.error }, { status: 400 });
 
     const prompt = builtin
-      ? await upsertEvalPromptOverride({ id, name, content })
-      : await updateEvalPrompt(id, { name, content });
+      ? await upsertEvalPromptOverride({ id, name, content, ...evaluation.value })
+      : await updateEvalPrompt(id, { name, content, ...evaluation.value });
     return NextResponse.json({ prompt: { ...prompt, builtin: Boolean(builtin), overridden: Boolean(builtin) } });
   } catch (error) {
     console.log("Error updating eval prompt:", error);

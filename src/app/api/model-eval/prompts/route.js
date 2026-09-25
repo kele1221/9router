@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createEvalPrompt, getEvalPrompts } from "@/lib/db/index.js";
 import { BUILTIN_EVAL_PROMPTS, isBuiltinPromptId } from "@/shared/constants/evalPrompts.js";
+import { validatePromptEvaluation } from "@/lib/modelEval/arithmetic.js";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function GET() {
       ...BUILTIN_EVAL_PROMPTS.map((builtin) => {
         const override = overrides.get(builtin.id);
         return override
-          ? { id: builtin.id, name: override.name, content: override.content, builtin: true, overridden: true, updatedAt: override.updatedAt }
+          ? { id: builtin.id, name: override.name, content: override.content, evaluationType: override.evaluationType, expectedAnswer: override.expectedAnswer, builtin: true, overridden: true, updatedAt: override.updatedAt }
           : { ...builtin, builtin: true, overridden: false, updatedAt: null };
       }),
       ...stored.filter((p) => !isBuiltinPromptId(p.id)).map((p) => ({ ...p, builtin: false, overridden: false })),
@@ -35,7 +36,9 @@ export async function POST(request) {
     const content = String(body.content || "").trim();
     if (!name) return NextResponse.json({ error: "名称不能为空" }, { status: 400 });
     if (!content) return NextResponse.json({ error: "Prompt 内容不能为空" }, { status: 400 });
-    const prompt = await createEvalPrompt({ name, content });
+    const evaluation = validatePromptEvaluation({ evaluationType: body.evaluationType ?? "visual", expectedAnswer: body.expectedAnswer });
+    if (evaluation.error) return NextResponse.json({ error: evaluation.error }, { status: 400 });
+    const prompt = await createEvalPrompt({ name, content, ...evaluation.value });
     return NextResponse.json({ prompt: { ...prompt, builtin: false } }, { status: 201 });
   } catch (error) {
     console.log("Error creating eval prompt:", error);

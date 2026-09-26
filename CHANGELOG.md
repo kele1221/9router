@@ -1,3 +1,8 @@
+# v0.5.91-k.0 (2026-09-26)
+
+## Fork
+- Sync Fork display and CLI release version with upstream v0.5.91.
+
 # v0.5.91 (2026-09-26)
 
 ## Features

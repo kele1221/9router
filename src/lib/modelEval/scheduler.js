@@ -5,6 +5,7 @@ import { getEvalPromptById, getEvalSchedules, updateEvalSchedule } from "@/lib/d
 import { findBuiltinPrompt, isBuiltinPromptId } from "@/shared/constants/evalPrompts.js";
 import { cronMatches, parseCron } from "./cron.js";
 import { RunBusyError, markInterruptedRuns, startRun } from "./runner.js";
+import { expandThinkingTargets } from "./thinkingTargets.js";
 
 export const TICK_INTERVAL_MS = 60 * 1000;
 
@@ -67,12 +68,12 @@ export async function resolvePromptContent(promptId) {
   if (isBuiltinPromptId(promptId)) {
     // A user edit of a built-in prompt is stored under the built-in id.
     const override = await getEvalPromptById(promptId);
-    if (override) return { name: override.name, content: override.content };
+    if (override) return { name: override.name, content: override.content, evaluationType: override.evaluationType, expectedAnswer: override.expectedAnswer };
     const builtin = findBuiltinPrompt(promptId);
-    return builtin ? { name: builtin.name, content: builtin.content } : null;
+    return builtin ? { name: builtin.name, content: builtin.content, evaluationType: builtin.evaluationType, expectedAnswer: builtin.expectedAnswer } : null;
   }
   const prompt = await getEvalPromptById(promptId);
-  return prompt ? { name: prompt.name, content: prompt.content } : null;
+  return prompt ? { name: prompt.name, content: prompt.content, evaluationType: prompt.evaluationType, expectedAnswer: prompt.expectedAnswer } : null;
 }
 
 async function tick() {
@@ -94,13 +95,22 @@ async function tick() {
       }
 
       try {
+        const { targets } = await expandThinkingTargets(schedule.models, schedule.thinkingEfforts || ["none"]);
+        if (!targets.length) {
+          await updateEvalSchedule(schedule.id, { lastError: "thinking-level-unsupported" });
+          continue;
+        }
         const run = await startRun({
           promptId: schedule.promptId,
           promptName: prompt.name,
           promptContent: prompt.content,
+          evaluationType: prompt.evaluationType,
+          expectedAnswer: prompt.expectedAnswer,
           source: "schedule",
           scheduleId: schedule.id,
           models: schedule.models,
+          thinkingEfforts: schedule.thinkingEfforts || ["none"],
+          targets,
         });
         await updateEvalSchedule(schedule.id, {
           lastRunAt: now.toISOString(),

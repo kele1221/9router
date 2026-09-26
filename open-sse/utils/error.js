@@ -43,12 +43,13 @@ export function buildErrorBody(statusCode, message) {
  * @param {string} message - Error message
  * @returns {Response} HTTP Response object
  */
-export function errorResponse(statusCode, message) {
+export function errorResponse(statusCode, message, extraHeaders = null) {
   return new Response(JSON.stringify(buildErrorBody(statusCode, message)), {
     status: statusCode,
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*"
+      "Access-Control-Allow-Origin": "*",
+      ...extraHeaders
     }
   });
 }
@@ -126,20 +127,22 @@ export async function parseUpstreamError(response, executor = null) {
  * @param {number} statusCode - HTTP status code
  * @param {string} message - Error message
  * @param {number} [resetsAtMs] - Optional precise cooldown expiry (ms epoch) for provider-specific quota errors
- * @param {{bodyText?: string, contentType?: string}} [upstream] - Raw upstream payload to preserve
+ * @param {{bodyText?: string, contentType?: string}|object} [upstreamOrHeaders] - Raw upstream payload or extra headers
+ * @param {object} [extraHeaders] - Extra upstream headers when preserving a raw payload
  * @returns {{ success: false, status: number, error: string, response: Response, resetsAtMs?: number }}
  */
-export function createErrorResult(statusCode, message, resetsAtMs, upstream = null) {
-  const response = upstream && typeof upstream.bodyText === "string"
-    ? new Response(upstream.bodyText, {
+export function createErrorResult(statusCode, message, resetsAtMs, upstreamOrHeaders = null, extraHeaders = null) {
+  const preservesBody = upstreamOrHeaders && typeof upstreamOrHeaders.bodyText === "string";
+  const response = preservesBody
+    ? new Response(upstreamOrHeaders.bodyText, {
       status: statusCode,
       headers: {
-        "Content-Type": upstream.contentType || "application/json",
+        "Content-Type": upstreamOrHeaders.contentType || "application/json",
         "Access-Control-Allow-Origin": "*",
+        ...(extraHeaders || {}),
       },
     })
-    : errorResponse(statusCode, message);
-
+    : errorResponse(statusCode, message, upstreamOrHeaders);
   return {
     success: false,
     status: statusCode,
@@ -157,7 +160,7 @@ export function createErrorResult(statusCode, message, resetsAtMs, upstream = nu
  * @param {string} retryAfterHuman - Human-readable retry info e.g. "reset after 30s"
  * @returns {Response}
  */
-export function unavailableResponse(statusCode, message, retryAfter, retryAfterHuman) {
+export function unavailableResponse(statusCode, message, retryAfter, retryAfterHuman, extraHeaders = null) {
   const retryAfterSec = Math.max(Math.ceil((new Date(retryAfter).getTime() - Date.now()) / 1000), 1);
   const msg = `${message} (${retryAfterHuman})`;
   return new Response(
@@ -165,8 +168,10 @@ export function unavailableResponse(statusCode, message, retryAfter, retryAfterH
     {
       status: statusCode,
       headers: {
+        ...extraHeaders,
         "Content-Type": "application/json",
-        "Retry-After": String(retryAfterSec)
+        // Intentionally mis-cased to prevent duplicate headers
+        "retry-after": String(retryAfterSec)
       }
     }
   );

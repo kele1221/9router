@@ -9,6 +9,7 @@ import { getInternalBaseUrl, getInternalHeaders } from "@/lib/internalApi.js";
 import { extractCode } from "./extractHtml.js";
 import { detectMarkers } from "./markers.js";
 import { writeResultFile } from "./outputDir.js";
+import { evaluateArithmeticAnswer, validatePromptEvaluation } from "./arithmetic.js";
 
 // Hard cap per model, and the silence budget while it streams. Cap too tight and
 // slow-but-alive models get reported as timeouts; the idle budget is what cuts a
@@ -76,7 +77,7 @@ function abortMessage(reason) {
 
 // Non-stream fail-open fallback for providers that answer a stream:true request
 // with a whole JSON completion. Returns { content, finishReason, usage, error }.
-function parseCompletion(parsed) {
+function parseCompletion(parsed, { allowEmptyContent = false } = {}) {
   if (parsed?.error) {
     const detail = parsed.error?.message || parsed.error;
     return { error: String(detail).slice(0, 500) };
@@ -86,7 +87,7 @@ function parseCompletion(parsed) {
 
   const content = normalizeContent(choice.message);
   const finishReason = choice.finish_reason || null;
-  if (!content.trim()) {
+  if (!content.trim() && !allowEmptyContent) {
     const reasoningOnly = choice.message?.reasoning || choice.message?.reasoning_content;
     return {
       finishReason,
@@ -118,7 +119,7 @@ async function errorDetail(res) {
 // Streams the completion: gateways that buffer or stall a whole non-stream
 // generation instead deliver deltas, and each chunk re-arms the idle timer.
 // Returns { content, finishReason, usage, error }
-async function callModel({ model, prompt, signal, armIdle }) {
+async function callModel({ model, prompt, thinkingEffort, signal, armIdle, allowEmptyContent = false }) {
   armIdle();
   const res = await fetch(`${getInternalBaseUrl()}/api/v1/chat/completions`, {
     method: "POST",
@@ -127,10 +128,7 @@ async function callModel({ model, prompt, signal, armIdle }) {
       model,
       messages: [{ role: "user", content: prompt }],
       max_tokens: MAX_TOKENS,
-      // The graded output is code, not chain of thought. A client-side intent wins
-      // over the provider's configured thinking mode; providers that cannot turn
-      // thinking off clamp it to their lowest level.
-      reasoning_effort: "none",
+      reasoning_effort: thinkingEffort,
       stream: true,
     }),
     signal,
@@ -142,7 +140,7 @@ async function callModel({ model, prompt, signal, armIdle }) {
   }
 
   const streaming = (res.headers.get("content-type") || "").includes("text/event-stream");
-  if (!streaming) return parseCompletion(await res.json().catch(() => null));
+  if (!streaming) return parseCompletion(await res.json().catch(() => null), { allowEmptyContent });
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -175,7 +173,7 @@ async function callModel({ model, prompt, signal, armIdle }) {
     }
   }
 
-  if (!content.trim()) {
+  if (!content.trim() && !allowEmptyContent) {
     return {
       finishReason,
       usage,
@@ -185,7 +183,7 @@ async function callModel({ model, prompt, signal, armIdle }) {
   return { content, finishReason, usage };
 }
 
-async function runOneModel({ resultId, model, prompt, promptName }) {
+async function runOneModel({ resultId, model, thinkingEffort, prompt, promptName, evaluationType, expectedAnswer }) {
   const controller = new AbortController();
   state.active?.controllers.add(controller);
   const timeoutId = setTimeout(() => controller.abort(new Error("total timeout")), REQUEST_TIMEOUT_MS);
@@ -200,7 +198,7 @@ async function runOneModel({ resultId, model, prompt, promptName }) {
     // Visible through the dashboard's 2s poll: without it a multi-minute model
     // looks like the run never started.
     await updateEvalResult(resultId, { status: "running" });
-    const outcome = await callModel({ model, prompt, signal: controller.signal, armIdle });
+    const outcome = await callModel({ model, prompt, thinkingEffort, signal: controller.signal, armIdle, allowEmptyContent: evaluationType === "arithmetic" });
     const latencyMs = Date.now() - startedAt;
 
     if (outcome.error) {
@@ -210,7 +208,22 @@ async function runOneModel({ resultId, model, prompt, promptName }) {
         finishReason: outcome.finishReason || null,
         usage: outcome.usage,
         error: outcome.error,
-        markers: detectMarkers("", { finishReason: outcome.finishReason }),
+        markers: evaluationType === "arithmetic" ? null : detectMarkers("", { finishReason: outcome.finishReason }),
+      });
+    }
+
+    if (evaluationType === "arithmetic") {
+      return updateEvalResult(resultId, {
+        status: "ok",
+        code: null,
+        rawText: outcome.content.slice(0, 20000),
+        filePath: null,
+        latencyMs,
+        finishReason: outcome.finishReason || null,
+        usage: outcome.usage,
+        error: null,
+        markers: null,
+        autoEvaluation: evaluateArithmeticAnswer({ expectedAnswer, actualAnswer: outcome.content }),
       });
     }
 
@@ -228,7 +241,7 @@ async function runOneModel({ resultId, model, prompt, promptName }) {
     }
 
     // Durable copy on disk for the user to open directly; failure is non-fatal.
-    const filePath = writeResultFile({ model, promptName, code });
+    const filePath = writeResultFile({ model, promptName, thinkingEffort, code });
 
     return updateEvalResult(resultId, {
       status: "ok",
@@ -240,6 +253,7 @@ async function runOneModel({ resultId, model, prompt, promptName }) {
       usage: outcome.usage,
       error: null,
       markers: detectMarkers(code, { finishReason: outcome.finishReason }),
+      autoEvaluation: null,
     });
   } catch (err) {
     const latencyMs = Date.now() - startedAt;
@@ -250,7 +264,7 @@ async function runOneModel({ resultId, model, prompt, promptName }) {
       status: aborted ? "timeout" : "error",
       latencyMs,
       error: aborted ? abortMessage(controller.signal.reason) : String(err?.message || err).slice(0, 500),
-      markers: detectMarkers(""),
+      markers: evaluationType === "arithmetic" ? null : detectMarkers(""),
     });
   } finally {
     clearTimeout(timeoutId);
@@ -259,7 +273,7 @@ async function runOneModel({ resultId, model, prompt, promptName }) {
   }
 }
 
-async function loop({ runId, models, prompt, promptName }) {
+async function loop({ runId, models, prompt, promptName, evaluationType, expectedAnswer }) {
   const groups = new Map();
   for (const target of models) {
     const provider = String(target.model).split("/")[0] || "";
@@ -268,7 +282,7 @@ async function loop({ runId, models, prompt, promptName }) {
   const runGroup = async (group) => {
     for (const target of group) {
       if (state.active?.canceled) return;
-      await runOneModel({ ...target, prompt, promptName });
+      await runOneModel({ ...target, prompt, promptName, evaluationType, expectedAnswer });
     }
   };
   try {
@@ -298,20 +312,24 @@ async function loop({ runId, models, prompt, promptName }) {
 }
 
 // Creates the run row (plus one pending result row per model) and starts the loop.
-export async function startRun({ promptId, promptName, promptContent, source, scheduleId, models }) {
+export async function startRun({ promptId, promptName, promptContent, evaluationType = "visual", expectedAnswer = null, source, scheduleId, models, thinkingEfforts = ["none"], targets = null }) {
   if (state.active) throw new RunBusyError();
+  const evaluation = validatePromptEvaluation({ evaluationType, expectedAnswer });
+  if (evaluation.error) throw new Error(evaluation.error);
 
   // Slot is reserved before the first await: two concurrent POSTs must not both
   // pass the busy check and start a second loop.
   state.active = { runId: null, canceled: false, controllers: new Set(), startedAt: new Date().toISOString() };
   let run;
-  const targets = [];
+  const requestedTargets = targets || models.flatMap((model) => thinkingEfforts.map((thinkingEffort) => ({ model, thinkingEffort })));
+  const queuedTargets = [];
   try {
-    run = await createEvalRun({ promptId, promptName, promptContent, source, scheduleId, models });
-    for (const model of models) {
+    run = await createEvalRun({ promptId, promptName, promptContent, ...evaluation.value, source, scheduleId, models, thinkingEfforts });
+    for (const target of requestedTargets) {
+      const { model, thinkingEffort } = target;
       const provider = String(model).split("/")[0] || null;
-      const result = await createEvalResult({ runId: run.id, model, provider });
-      targets.push({ resultId: result.id, model });
+      const result = await createEvalResult({ runId: run.id, model, provider, thinkingEffort });
+      queuedTargets.push({ resultId: result.id, model, thinkingEffort });
     }
   } catch (err) {
     state.active = null;
@@ -321,7 +339,7 @@ export async function startRun({ promptId, promptName, promptContent, source, sc
   state.active.runId = run.id;
   state.active.startedAt = run.startedAt;
   // Detached on purpose: the HTTP request returns immediately, the page polls.
-  loop({ runId: run.id, models: targets, prompt: promptContent, promptName }).catch((err) => {
+  loop({ runId: run.id, models: queuedTargets, prompt: promptContent, promptName, ...evaluation.value }).catch((err) => {
     console.error("[ModelEval] loop crashed:", err?.message);
     state.active = null;
   });
@@ -348,7 +366,7 @@ export async function retryResults({ runId, resultIds = null }) {
     for (const row of targets) {
       await updateEvalResult(row.id, {
         status: "pending", code: null, rawText: null, filePath: null,
-        latencyMs: null, finishReason: null, markers: null, usage: null, error: null,
+        latencyMs: null, finishReason: null, markers: null, usage: null, error: null, autoEvaluation: null,
       });
     }
     await updateEvalRun(runId, { status: "running", error: null, finishedAt: null });
@@ -359,9 +377,11 @@ export async function retryResults({ runId, resultIds = null }) {
 
   loop({
     runId,
-    models: targets.map((row) => ({ resultId: row.id, model: row.model })),
+    models: targets.map((row) => ({ resultId: row.id, model: row.model, thinkingEffort: row.thinkingEffort || "none" })),
     prompt: run.promptContent,
     promptName: run.promptName,
+    evaluationType: run.evaluationType,
+    expectedAnswer: run.expectedAnswer,
   }).catch((err) => {
     console.error("[ModelEval] retry loop crashed:", err?.message);
     state.active = null;

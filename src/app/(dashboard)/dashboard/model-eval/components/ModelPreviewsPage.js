@@ -75,7 +75,7 @@ export default function ModelPreviewsPage({ model, onBack, showNotice }) {
             <span className="material-symbols-outlined text-[26px] text-primary">preview</span>
             <span className="truncate" title={model}>{model}</span>
           </h2>
-          <p className="mt-1 text-sm text-text-muted">该模型历史生成的 HTML 预览，按生成时间从新到旧排列。</p>
+          <p className="mt-1 text-sm text-text-muted">该模型历史评测结果，按生成时间从新到旧排列。</p>
         </div>
         <Button variant="secondary" icon="arrow_back" onClick={onBack}>返回排行榜</Button>
       </header>
@@ -86,6 +86,7 @@ export default function ModelPreviewsPage({ model, onBack, showNotice }) {
         <div className="grid gap-4 md:grid-cols-2">
           {results.map((result) => {
             const status = STATUS_STYLES[result.status] || STATUS_STYLES.pending;
+            const isArithmetic = result.evaluationType === "arithmetic";
             return (
               <article key={result.id} className="flex flex-col gap-2 rounded-[14px] border border-border-subtle bg-surface p-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -94,22 +95,22 @@ export default function ModelPreviewsPage({ model, onBack, showNotice }) {
                     {result.promptName || "（未命名 Prompt）"}
                   </span>
                   <span className="text-[11px] text-text-muted">{new Date(result.startedAt || result.createdAt).toLocaleString()}</span>
-                  <span className="ml-auto text-[11px] font-semibold text-text-main">{result.humanScore ?? "—"} 分</span>
+                  <span className="ml-auto text-[11px] font-semibold text-text-main">{isArithmetic ? (result.autoEvaluation?.verdict === "correct" ? "正确" : result.autoEvaluation?.verdict === "incorrect" ? "错误" : "格式无效") : `${result.humanScore ?? "—"} 分`}</span>
                 </div>
 
-                <Preview code={result.code} height={220} title={`preview-${result.id}`} />
+                {isArithmetic ? <div className="flex min-h-[220px] flex-col justify-center gap-2 rounded-[10px] bg-surface-2 p-4 text-sm text-text-main"><p>标准答案：{result.autoEvaluation?.expectedAnswer ?? result.expectedAnswer ?? "—"}</p><p className="text-xs text-text-muted">模型原文回答</p><pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-[8px] bg-bg p-3 text-xs">{result.rawText || "（空）"}</pre></div> : <Preview code={result.code} height={220} autoHeight title={`preview-${result.id}`} />}
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {result.markers?.hasSvg && <MetaChip>SVG</MetaChip>}
-                  {result.markers?.hasAnimation && <MetaChip>动画</MetaChip>}
-                  {result.markers?.truncated && <MetaChip>输出截断</MetaChip>}
+                  {!isArithmetic && result.markers?.hasSvg && <MetaChip>SVG</MetaChip>}
+                  {!isArithmetic && result.markers?.hasAnimation && <MetaChip>动画</MetaChip>}
+                  {!isArithmetic && result.markers?.truncated && <MetaChip>输出截断</MetaChip>}
                   {result.source === "schedule" && <MetaChip>定时</MetaChip>}
                   {result.latencyMs ? <MetaChip>{(result.latencyMs / 1000).toFixed(1)}s</MetaChip> : null}
                   <div className="ml-auto flex items-center gap-1">
-                    <Button size="sm" variant="ghost" icon="download" onClick={() => window.open(`/api/model-eval/results/${result.id}/download`, "_blank")}>
+                    {!isArithmetic && <Button size="sm" variant="ghost" icon="download" onClick={() => window.open(`/api/model-eval/results/${result.id}/download`, "_blank")}>
                       源码
-                    </Button>
-                    {result.code && (
+                    </Button>}
+                    {!isArithmetic && result.code && (
                       <Button size="sm" variant="ghost" icon="fullscreen" onClick={() => setFullscreen(result)}>全屏</Button>
                     )}
                   </div>

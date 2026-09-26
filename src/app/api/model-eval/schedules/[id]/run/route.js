@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getEvalScheduleById, updateEvalSchedule } from "@/lib/db/index.js";
 import { RunBusyError, startRun } from "@/lib/modelEval/runner.js";
 import { resolvePromptContent } from "@/lib/modelEval/scheduler.js";
+import { expandThinkingTargets } from "@/lib/modelEval/thinkingTargets.js";
 
 export const dynamic = "force-dynamic";
 
@@ -17,13 +18,19 @@ export async function POST(request, { params }) {
     if (!prompt) return NextResponse.json({ error: "Prompt 不存在" }, { status: 400 });
 
     try {
+      const { targets } = await expandThinkingTargets(schedule.models, schedule.thinkingEfforts || ["none"]);
+      if (!targets.length) return NextResponse.json({ error: "该任务没有支持所选思考深度的模型" }, { status: 400 });
       const run = await startRun({
         promptId: schedule.promptId,
         promptName: prompt.name,
         promptContent: prompt.content,
+        evaluationType: prompt.evaluationType,
+        expectedAnswer: prompt.expectedAnswer,
         source: "manual",
         scheduleId: schedule.id,
         models: schedule.models,
+        thinkingEfforts: schedule.thinkingEfforts || ["none"],
+        targets,
       });
       await updateEvalSchedule(schedule.id, {
         lastRunAt: new Date().toISOString(),

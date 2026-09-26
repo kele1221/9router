@@ -30,21 +30,21 @@ function extensionFor(code) {
   return "html";
 }
 
-// <模型名>-<测试提示>-<时间戳>.<ext>
-export function buildResultFileName({ model, promptName, date = new Date(), ext = "html" }) {
-  const parts = [sanitizePart(model, 80) || "model", sanitizePart(promptName) || "prompt", formatStamp(date)];
+// <模型名>-<思考深度>-<测试提示>-<时间戳>.<ext>
+export function buildResultFileName({ model, promptName, thinkingEffort = "none", date = new Date(), ext = "html" }) {
+  const parts = [sanitizePart(model, 80) || "model", sanitizePart(thinkingEffort) || "none", sanitizePart(promptName) || "prompt", formatStamp(date)];
   return `${parts.join("-")}.${ext}`;
 }
 
 // Returns the absolute path, or null when the write fails — a full disk or a
 // read-only checkout must never fail an evaluation run.
-export function writeResultFile({ model, promptName, code, date = new Date() }) {
+export function writeResultFile({ model, promptName, thinkingEffort = "none", code, date = new Date() }) {
   try {
     const dir = getOutputDir();
     fs.mkdirSync(dir, { recursive: true });
 
     const ext = extensionFor(code);
-    const fileName = buildResultFileName({ model, promptName, date, ext });
+    const fileName = buildResultFileName({ model, promptName, thinkingEffort, date, ext });
     const base = fileName.slice(0, -(ext.length + 1));
     let target = path.join(dir, fileName);
     let suffix = 2;

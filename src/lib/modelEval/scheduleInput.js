@@ -2,6 +2,7 @@
 // route merges the stored row with the request body first, so this stays a
 // single shape check instead of a partial-update rules matrix.
 import { parseCron } from "./cron.js";
+import { normalizeThinkingEfforts } from "./thinkingTargets.js";
 
 export const SCHEDULE_MODES = ["hourly", "daily", "cron"];
 const MAX_MODELS = 50;
@@ -25,7 +26,8 @@ export function sanitizeScheduleInput(body = {}) {
   const mode = String(body.mode || "");
   if (!SCHEDULE_MODES.includes(mode)) return { error: "调度模式不合法" };
 
-  const value = { name: name.slice(0, 100), models, promptId, mode, enabled: body.enabled !== false };
+  const thinkingEfforts = normalizeThinkingEfforts(body.thinkingEfforts);
+  const value = { name: name.slice(0, 100), models, thinkingEfforts, promptId, mode, enabled: body.enabled !== false };
 
   if (mode === "daily") {
     if (!validDailyTime(body.dailyTime)) return { error: "时间格式应为 HH:MM" };

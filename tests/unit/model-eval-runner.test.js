@@ -47,6 +47,17 @@ const startOne = (model) => runner.startRun({
   models: [model],
 });
 
+const startArithmetic = (model, expectedAnswer = "10") => runner.startRun({
+  promptId: "builtin:arithmetic-order-of-operations",
+  promptName: "四则运算",
+  promptContent: "计算并只输出数字",
+  evaluationType: "arithmetic",
+  expectedAnswer,
+  source: "manual",
+  scheduleId: null,
+  models: [model],
+});
+
 // Serves an SSE body made of whatever frames the body pushes; an aborted request
 // errors the stream, which is what the runner's reader sees on timeout.
 function sseFetch(onStart) {
@@ -106,6 +117,28 @@ describe("model eval runner", () => {
       await waitFor(async () => (await repo.getEvalRunById(run.id)).status === "done");
       expect(peak).toBe(2);
       expect(peakPerProvider).toEqual({ p1: 1, p2: 1 });
+      await waitFor(async () => !runner.isBusy());
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("runs every selected thinking effort as a separate target", async () => {
+    const originalFetch = global.fetch;
+    const efforts = [];
+    global.fetch = async (url, options) => {
+      efforts.push(JSON.parse(options.body).reasoning_effort);
+      return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "<svg/>" }, finish_reason: "stop" }] }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    try {
+      const run = await runner.startRun({
+        promptId: "builtin:pelican-svg-bike", promptName: "思考档位", promptContent: "画一只鹈鹕",
+        source: "manual", scheduleId: null, models: ["p1/a"], thinkingEfforts: ["none", "high"],
+      });
+      await waitFor(async () => (await repo.getEvalRunById(run.id)).status === "done");
+      const rows = await repo.getEvalResultsByRun(run.id);
+      expect(rows.map((row) => row.thinkingEffort)).toEqual(["none", "high"]);
+      expect(efforts).toEqual(["none", "high"]);
       await waitFor(async () => !runner.isBusy());
     } finally {
       global.fetch = originalFetch;
@@ -181,6 +214,58 @@ describe("model eval runner", () => {
       const row = await firstResult(run.id);
       expect(row.status).toBe("ok");
       expect(row.code).toContain("<svg>");
+      await waitFor(async () => !runner.isBusy());
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("grades arithmetic replies without extracting code or writing result files", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: " 10.0\n" }, finish_reason: "stop" }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    try {
+      const run = await startArithmetic("t/arithmetic");
+      const row = await firstResult(run.id);
+      expect(row).toMatchObject({ status: "ok", code: null, filePath: null, rawText: " 10.0\n", autoEvaluation: { verdict: "correct", expectedAnswer: "10", normalizedAnswer: "10" } });
+      await waitFor(async () => !runner.isBusy());
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("keeps a malformed arithmetic reply as a completed request", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async () => new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "答案是 10" }, finish_reason: "stop" }],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    try {
+      const run = await startArithmetic("t/arithmetic-invalid");
+      const row = await firstResult(run.id);
+      expect(row).toMatchObject({ status: "ok", code: null, filePath: null, autoEvaluation: { verdict: "invalid", actualAnswer: "答案是 10", normalizedAnswer: null } });
+      await waitFor(async () => !runner.isBusy());
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("retries arithmetic transport failures against the run answer snapshot", async () => {
+    const originalFetch = global.fetch;
+    let failed = true;
+    global.fetch = async () => failed
+      ? new Response("upstream down", { status: 503 })
+      : new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "10" }, finish_reason: "stop" }] }), { status: 200, headers: { "content-type": "application/json" } });
+    try {
+      const run = await startArithmetic("t/arithmetic-retry", "10");
+      expect((await firstResult(run.id)).status).toBe("error");
+      failed = false;
+      expect(await runner.retryResults({ runId: run.id })).toEqual({ retried: 1 });
+      const retried = await waitFor(async () => {
+        const [row] = await repo.getEvalResultsByRun(run.id);
+        return row.status === "ok" ? row : null;
+      });
+      expect(retried.autoEvaluation).toMatchObject({ verdict: "correct", expectedAnswer: "10" });
       await waitFor(async () => !runner.isBusy());
     } finally {
       global.fetch = originalFetch;

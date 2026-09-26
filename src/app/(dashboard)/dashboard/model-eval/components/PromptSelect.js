@@ -6,7 +6,7 @@ import { Button, Modal, ConfirmModal, Select } from "@/shared/components";
 
 // Prompt dropdown + inline manager. Built-in presets can be edited (the edit is
 // saved as an override and can be reverted); custom prompts can also be deleted.
-export default function PromptSelect({ prompts, value, onChange, onPromptsChanged, showNotice }) {
+export default function PromptSelect({ prompts, value, evaluationType = "visual", onChange, onPromptsChanged, showNotice }) {
   const [editing, setEditing] = useState(null); // { id, name, content, builtin }
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -31,7 +31,7 @@ export default function PromptSelect({ prompts, value, onChange, onPromptsChange
       const res = await fetch(url, {
         method: isNew ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editing.name, content: editing.content }),
+        body: JSON.stringify({ name: editing.name, content: editing.content, evaluationType: editing.evaluationType, expectedAnswer: editing.expectedAnswer }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "保存失败");
@@ -76,7 +76,7 @@ export default function PromptSelect({ prompts, value, onChange, onPromptsChange
           size="sm"
           variant="secondary"
           icon="add"
-          onClick={() => setEditing({ id: null, name: "", content: current?.content || "" })}
+          onClick={() => setEditing({ id: null, name: "", content: "", evaluationType, expectedAnswer: "" })}
         >
           新增
         </Button>
@@ -132,6 +132,17 @@ export default function PromptSelect({ prompts, value, onChange, onPromptsChange
               placeholder="Prompt 名称"
               className="w-full py-2 px-3 text-sm bg-surface-2 border border-transparent rounded-[10px] text-text-main focus:outline-none focus:ring-2 focus:ring-brand-500/30"
             />
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-text-main">评测类型</p>
+              <div className="flex gap-2">
+                {[{ value: "visual", label: "可视化代码" }, { value: "arithmetic", label: "算术答题" }].map((type) => (
+                  <button key={type.value} type="button" onClick={() => setEditing({ ...editing, evaluationType: type.value, expectedAnswer: type.value === "visual" ? null : editing.expectedAnswer ?? "" })} className={`rounded-[8px] px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${editing.evaluationType === type.value ? "bg-brand-500/15 text-primary" : "bg-surface-2 text-text-muted hover:text-text-main"}`}>{type.label}</button>
+                ))}
+              </div>
+            </div>
+            {editing.evaluationType === "arithmetic" && (
+              <input value={editing.expectedAnswer ?? ""} onChange={(e) => setEditing({ ...editing, expectedAnswer: e.target.value })} placeholder="标准答案，例如 10" inputMode="decimal" className="w-full py-2 px-3 text-sm bg-surface-2 border border-transparent rounded-[10px] text-text-main focus:outline-none focus:ring-2 focus:ring-brand-500/30" />
+            )}
             <textarea
               value={editing.content}
               onChange={(e) => setEditing({ ...editing, content: e.target.value })}
@@ -172,6 +183,7 @@ export default function PromptSelect({ prompts, value, onChange, onPromptsChange
 PromptSelect.propTypes = {
   prompts: PropTypes.array.isRequired,
   value: PropTypes.string,
+  evaluationType: PropTypes.oneOf(["visual", "arithmetic"]),
   onChange: PropTypes.func.isRequired,
   onPromptsChanged: PropTypes.func.isRequired,
   showNotice: PropTypes.func,

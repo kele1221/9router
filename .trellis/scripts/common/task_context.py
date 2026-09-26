@@ -52,6 +52,23 @@ _CODE_FILE_EXTENSIONS = {
 }
 
 
+def curated_entry_count(jsonl_file: Path) -> int:
+    """Return the number of non-seed context entries in a JSONL manifest."""
+    if not jsonl_file.is_file():
+        return 0
+    count = 0
+    for line in jsonl_file.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if data.get("file"):
+            count += 1
+    return count
+
+
 # =============================================================================
 # Command: add-context
 # =============================================================================

@@ -6,16 +6,17 @@ import { resolveTransport } from "../../open-sse/services/provider.js";
 import { FILTERS } from "../../src/app/api/providers/suggested-models/filters.js";
 
 // Chat-only models (no /messages, no /responses support on opencode-go)
-const CHAT_ONLY = ["glm-5.3", "glm-5.2", "glm-5.1", "kimi-k2.7-code", "kimi-k2.6", "kimi-k3",
-  "deepseek-flash", "longcat-2.0", "mimo-v2.5", "mimo-v2.5-pro", "hy4-preview", "hy3"];
+const CHAT_ONLY = ["glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5", "kimi-k3",
+  "deepseek-flash", "longcat-2.0", "mimo-v2.6-flash", "mimo-v2.6-pro",
+  "mimo-v2.5", "mimo-v2.5-pro", "mimo-v2-pro", "mimo-v2-omni", "hy4-preview", "hy3", "hy3-preview", "omen-alpha"];
 // Models that also expose the Anthropic /messages endpoint
-const CLAUDE_CAPABLE = ["minimax-m3", "minimax-m2.7", "minimax-m2.5",
-  "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus"];
+const CLAUDE_CAPABLE = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "space-bunny-free",
+  "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus"];
 // Models that expose OpenAI chat + Anthropic /messages (NOT /responses):
 // Console Go's /v1/responses demands real prior reasoning echoed back for
 // thinking-mode continuity, which 9router cannot provide — DeepSeek requests
 // from responses-format clients are translated to the chat transport instead.
-const DEEPSEEK_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"];
+const DEEPSEEK_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4.1-flash"];
 // Models exposed only through the OpenAI /responses endpoint (official endpoint table)
 const RESPONSES_ONLY = ["gpt-5.6-luna"];
 
@@ -32,15 +33,39 @@ describe("OpenCode Go model catalog", () => {
     const ids = (PROVIDER_MODELS["opencode-go"] || []).map((m) => m.id);
     expect(ids).toEqual([
       "deepseek-flash",
-      "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "kimi-k2.7-code", "kimi-k2.6", "kimi-k3",
-      "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp",
-      "longcat-2.0", "mimo-v2.5", "mimo-v2.5-pro",
-      "minimax-m3", "minimax-m2.7", "minimax-m2.5",
-      "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
-      "hy4-preview", "hy3",
-      "grok-4.6", "gpt-5.6-luna",
+      "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5", "kimi-k3",
+      "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-v4.1-flash",
+      "longcat-2.0", "mimo-v2.6-flash", "mimo-v2.6-pro", "mimo-v2.5", "mimo-v2.5-pro", "mimo-v2-pro", "mimo-v2-omni",
+      "minimax-m3", "minimax-m2.7", "minimax-m2.5", "space-bunny-free",
+      "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
+      "hy4-preview", "hy3", "hy3-preview", "omen-alpha",
+      "grok-4.7", "grok-4.6", "grok-4.5", "gpt-5.6-luna", "gpt-6-luna",
       "muse-spark-1.2-contributor", "muse-spark-1.3-contributor",
     ]);
+  });
+});
+
+describe("OpenCode Go family fallback (unknown/passthrough ids)", () => {
+  it("routes unknown grok/gpt ids to the responses lane", () => {
+    expect(getModelSupportedFormats("opencode-go", "grok-4.8")).toEqual(["openai-responses"]);
+    expect(getModelTargetFormat("opencode-go", "gpt-6-foo")).toBe("openai-responses");
+  });
+
+  it("gives unknown chat-family ids the chat-only lane, never /messages", () => {
+    for (const m of ["kimi-k4", "glm-6", "mimo-v3", "omen-beta"]) {
+      expect(getModelSupportedFormats("opencode-go", m)).toEqual(["openai"]);
+    }
+  });
+
+  it("keeps unknown minimax/qwen ids on the /messages lane too", () => {
+    for (const m of ["minimax-m9", "qwen4-max"]) {
+      expect(getModelSupportedFormats("opencode-go", m)).toEqual(["openai", "claude"]);
+    }
+  });
+
+  it("curated entries win over the family regex", () => {
+    expect(getModelSupportedFormats("opencode-go", "deepseek-flash")).toEqual(["openai"]);
+    expect(getModelSupportedFormats("opencode-go", "deepseek-v4-pro")).toEqual(["openai", "claude"]);
   });
 });
 
@@ -151,7 +176,7 @@ describe("OpenCode Go per-model transport guard (chatCore logic)", () => {
   });
 
   it("routes Muse Spark (responses-only) to /responses, never to /messages", () => {
-    for (const m of ["muse-spark-1.2-contributor", "muse-spark-1.3-contributor", "grok-4.6", "gpt-5.6-luna"]) {
+    for (const m of ["muse-spark-1.2-contributor", "muse-spark-1.3-contributor", "grok-4.7", "grok-4.6", "grok-4.5", "gpt-5.6-luna", "gpt-6-luna"]) {
       expect(getModelSupportedFormats("opencode-go", m)).toEqual(["openai-responses"]);
       expect(pickTransport("opencode-go", "openai-responses", "opencode-go", m)?.baseUrl).toBe("https://opencode.ai/zen/go/v1/responses");
       expect(pickTransport("opencode-go", "claude", "opencode-go", m)).toBeNull();

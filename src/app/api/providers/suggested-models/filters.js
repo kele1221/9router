@@ -23,7 +23,9 @@ export const FILTERS = {
 
   // Paid Go subscription: every model on the Go catalog is usable.
   "opencode-go": (models) =>
-    models.map((m) => ({ id: m.id, name: m.name || m.id })),
+    (Array.isArray(models) ? models : [])
+      .filter((m) => typeof m?.id === "string")
+      .map((m) => ({ id: m.id, name: m.name || m.id })),
 
   // models.dev returns a large catalog; keep only mimo models
   "mimo-free": (models) =>

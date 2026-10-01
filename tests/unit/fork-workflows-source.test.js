@@ -33,6 +33,19 @@ describe("fork maintenance workflows", () => {
     expect(source).not.toContain("npm publish");
   });
 
+  it("uses a dedicated workflow-write credential for both Git pushes and PR creation", () => {
+    const prepare = read("upstream-sync.yml").split("\n  validate:")[0];
+    expect(prepare).toContain("token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}");
+    expect(prepare).toContain("GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}");
+    expect(prepare).not.toContain("github.token");
+    expect(prepare.indexOf("Check upstream sync credential")).toBeLessThan(
+      prepare.indexOf("uses: actions/checkout@v4")
+    );
+    expect(prepare).toContain('if [ -z "$GH_TOKEN" ]; then');
+    expect(prepare).toContain("::error::Missing UPSTREAM_SYNC_TOKEN");
+    expect(prepare).toContain("exit 1");
+  });
+
   it("prevents inherited upstream deployment jobs from running in this fork", () => {
     expect(read("docker-publish.yml")).toContain("github.repository == 'decolua/9router'");
     expect(read("gitbook-pages.yml")).toContain("github.repository == 'decolua/9router'");

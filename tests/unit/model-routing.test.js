@@ -10,11 +10,13 @@ async function setupDb() {
   process.env.DATA_DIR = tempDir;
   vi.resetModules();
 
-  const { createProviderNode } = await import("@/models/index.js");
-  const { getModelInfo } = await import("@/sse/services/model.js");
+  const { createCombo, createProviderNode } = await import("@/models/index.js");
+  const { getComboModels, getModelInfo } = await import("@/sse/services/model.js");
 
   return {
+    createCombo,
     createProviderNode,
+    getComboModels,
     getModelInfo,
     cleanup() {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -76,5 +78,20 @@ describe("model routing", () => {
         provider: "openai-compatible-chat-test",
         model: "gpt-image-1",
       });
+  });
+
+  it("resolves Codey-qualified 9router models to an existing combo", async () => {
+    const ctx = await setupDb();
+    cleanup = ctx.cleanup;
+
+    await ctx.createCombo({
+      name: "gpt-5.6-sol",
+      models: ["codex/gpt-5.6-codex"],
+    });
+
+    await expect(ctx.getComboModels("9router/gpt-5.6-sol"))
+      .resolves.toEqual(["codex/gpt-5.6-codex"]);
+    await expect(ctx.getComboModels("codex/gpt-5.6-sol"))
+      .resolves.toBeNull();
   });
 });

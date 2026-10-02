@@ -10,6 +10,7 @@ const LOCAL_PROVIDER_ALIASES = {
 };
 
 const RESERVED_PROVIDER_PREFIXES = new Set(Object.keys(LOCAL_PROVIDER_ALIASES));
+const ROUTER_COMBO_PREFIX = "9router/";
 for (const entry of REGISTRY) {
   RESERVED_PROVIDER_PREFIXES.add(entry.id);
   if (entry.alias) RESERVED_PROVIDER_PREFIXES.add(entry.alias);
@@ -83,10 +84,15 @@ export async function getModelInfo(modelStr) {
  * @returns {Promise<string[]|null>} Array of models or null if not a combo
  */
 export async function getComboModels(modelStr) {
-  // Only check if it's not in provider/model format
-  if (modelStr.includes("/")) return null;
+  // Codey qualifies plugin-provided model IDs with the router name. Treat only
+  // that synthetic prefix as a combo namespace; other provider/model strings
+  // must keep their normal routing semantics.
+  const comboName = modelStr.startsWith(ROUTER_COMBO_PREFIX)
+    ? modelStr.slice(ROUTER_COMBO_PREFIX.length)
+    : modelStr;
+  if (comboName.includes("/")) return null;
 
-  const combo = await getComboByName(modelStr);
+  const combo = await getComboByName(comboName);
   if (combo && combo.models && combo.models.length > 0) {
     return combo.models;
   }

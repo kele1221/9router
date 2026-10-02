@@ -24,6 +24,27 @@ const creds = { apiKey: "k" };
 beforeEach(() => fetchMock.mockReset());
 
 describe("BaseExecutor.execute — retry by status (config-driven)", () => {
+  it("preserves the fork transform format while applying upstream header overrides", async () => {
+    const executor = makeExec({ baseUrl: "https://x/api", headers: { "X-Custom": "registry" } });
+    const body = { messages: [] };
+    executor.transformRequest = vi.fn().mockReturnValue(body);
+    fetchMock.mockResolvedValueOnce(res(200));
+
+    await executor.execute({
+      model: "test-model",
+      body,
+      stream: false,
+      credentials: creds,
+      format: "openai",
+      providerOverrides: { headers: { "X-Custom": "user" } },
+    });
+
+    expect(executor.transformRequest).toHaveBeenCalledWith(
+      "test-model", body, false, creds, "https://x/api", "openai"
+    );
+    expect(fetchMock.mock.calls[0][1].headers["X-Custom"]).toBe("user");
+  });
+
   it("retries 502 `attempts` times then succeeds", async () => {
     const ex = makeExec({ baseUrl: "https://x/api", retry: { 502: { attempts: 3, delayMs: 0 } } });
     fetchMock

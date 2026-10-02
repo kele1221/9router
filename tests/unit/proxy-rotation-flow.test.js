@@ -134,6 +134,20 @@ describe("tryRotateProxy", () => {
 });
 
 describe("getProviderCredentials + rotation flow", () => {
+  it("keeps the rotation-pinned Codex account while filtering by the requested context variant", async () => {
+    getProviderConnections.mockResolvedValue([
+      { id: "conn1", priority: 1, apiKey: "first", providerSpecificData: { enabledModels: ["gpt-6-sol"] } },
+      { id: "conn2", priority: 2, apiKey: "second", providerSpecificData: { enabledModels: ["gpt-6-sol[1m]"] } },
+      { id: "conn3", priority: 3, apiKey: "third", providerSpecificData: { enabledModels: ["gpt-6-sol[1m]"] } },
+    ]);
+    const credentials = await getProviderCredentials("codex", new Set(), "gpt-6-sol", {
+      requestedModel: "gpt-6-sol[1m]",
+      rotation: { pinnedConnectionId: "conn3", proxyExcludes: new Set() },
+    });
+
+    expect(credentials.connectionId).toBe("conn3");
+  });
+
   it("regular connection: rotation retry keeps same account and changes proxy URL", async () => {
     const ctx = { proxyExcludes: new Set(), rotationBudget: null, pinnedConnectionId: null };
     const creds1 = await getProviderCredentials("openai", new Set(), null, { rotation: ctx });

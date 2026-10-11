@@ -108,6 +108,42 @@ function normalizeSessionId(value) {
     return v;
 }
 
+// Any UUID embedded in a session id (bare, or inside a scoped/concatenated one).
+const SESSION_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/**
+ * Coerce a session id into a stable UUID suitable for upstream session-routing.
+ *
+ * Providers that keep a server-side prefix cache pinned to a backend node
+ * (CommandCode's threadId / x-session-id) reject non-UUID affinity keys by
+ * silently dropping them, which turns every request into a new session and
+ * invalidates the prefix cache. This normalizes our internal session ids, which
+ * are NOT always bare UUIDs, into a value those APIs accept:
+ *
+ *   bare uuid                          -> itself
+ *   "claude:<uuid>" / "<uuid><digits>" -> the embedded uuid
+ *   opaque token ("my-session-1")      -> deterministic uuid derived from it
+ *
+ * Returns null only for empty/invalid input so callers can fall back.
+ *
+ * Note the hash branch is intentional: falling back to a random uuid would
+ * destroy affinity entirely, so we keep a stable (if synthetic) key instead.
+ *
+ * @param {string} value - candidate session id
+ * @returns {string|null} lowercase UUID, or null when unusable
+ */
+export function toUuidSessionId(value) {
+    const v = normalizeSessionId(value);
+    if (!v) return null;
+
+    const m = v.match(SESSION_UUID_RE);
+    if (m) return m[0].toLowerCase();
+
+    // Deterministic derivation: same input always yields the same affinity key.
+    const h = crypto.createHash("sha256").update(v).digest("hex");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${((parseInt(h[16], 16) & 0x3) | 0x8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 // Extract Claude Code session id from metadata.user_id (_session_{uuid} | JSON {session_id})
 function extractClaudeCodeSession(userId) {
     if (typeof userId !== "string" || !userId) return null;

@@ -3,6 +3,7 @@ import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/providers.js";
 import { commandCodeToOpenAIResponse } from "../translator/response/commandcode-to-openai.js";
 import { SSE_DONE } from "../utils/sseConstants.js";
+import { toUuidSessionId } from "../utils/sessionManager.js";
 
 /**
  * CommandCodeExecutor — talks to https://api.commandcode.ai/alpha/generate
@@ -25,11 +26,19 @@ export class CommandCodeExecutor extends BaseExecutor {
     return body;
   }
 
-  buildHeaders(credentials, stream = true) {
+  buildHeaders(credentials, stream = true, url, model, body = null) {
+    // Mirror the threadId the request translator put in the body so both sides of
+    // the upstream session-routing key agree byte-for-byte (see §R2 of the task
+    // design). Preferring body.threadId keeps them identical even if the two code
+    // paths ever resolve a different source. Signature mirrors BaseExecutor.execute's
+    // call site (base.js) — url/model are unused here but positional.
+    const sessionId = toUuidSessionId(body?.threadId)
+      || toUuidSessionId(credentials?._clientSessionId)
+      || randomUUID();
     const headers = {
       "Content-Type": "application/json",
       ...(this.config.headers || {}),
-      "x-session-id": randomUUID(),
+      "x-session-id": sessionId,
     };
 
     const token = credentials?.apiKey || credentials?.accessToken;

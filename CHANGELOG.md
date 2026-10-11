@@ -1,3 +1,8 @@
+# v0.5.99-k.1 (2026-10-11)
+
+## Fix
+- **RTK caveman**: the injected language rule named `Vietnamese` and `English` as worked examples, so the model treated those two as the candidate set and echoed one of them instead of matching the user's input — a Chinese prompt got a Vietnamese reply. The rule is now a single directive, `Reply in the language of the user's most recent message.`, with no language names. A regression test asserts no level names a concrete language.
+
 # v0.5.99-k.0
 
 ## Fork

@@ -58,10 +58,32 @@ const USAGE_EXTRACTORS = {
       cached = n(raw.prompt_eval_cached_count);
     return { promptTokens: input, completionTokens: output, totalTokens: input + output, cachedTokens: cached };
   },
+  // CommandCode (/alpha/generate) streams AI SDK NDJSON, so its usage arrives in the
+  // AI SDK naming rather than any wire format the other extractors see. Two shapes exist:
+  //   v5 flat:   { inputTokens, outputTokens, totalTokens, reasoningTokens?, cachedInputTokens? }
+  //   v6 nested: { inputTokens:{total,noCache,cacheRead,cacheWrite},
+  //                outputTokens:{total,text,reasoning}, inputTokenDetails:{cacheReadTokens,cacheWriteTokens} }
+  // Both are read here so an upstream upgrade cannot silently zero the cache counts again.
+  //
+  // SUBSET INVARIANT — unlike claude() above, cache read/write are NOT added to prompt:
+  // inputTokens.total already INCLUDES the cached portion (noCache/cacheRead are a
+  // breakdown of it), and buildUsage()/canonicalizeUsage() document prompt_tokens as
+  // cache-inclusive. Adding them here would double-count the prefix and OVERSTATE cost.
+  //
+  // reasoningTokens is deliberately NOT reported: AI SDK's outputTokens.total already
+  // includes reasoning, while calculateCostFromTokens() adds reasoning_tokens ON TOP of
+  // completion_tokens — reporting it would introduce a new double-charge.
   commandcode(raw) {
-    const input = n(raw.inputTokens), output = n(raw.outputTokens);
+    const inRaw = raw.inputTokens, outRaw = raw.outputTokens;
+    const details = raw.inputTokenDetails;
+    const input = typeof inRaw === "number" ? inRaw : n(inRaw?.total);
+    const output = typeof outRaw === "number" ? outRaw : n(outRaw?.total);
     const total = typeof raw.totalTokens === "number" ? raw.totalTokens : input + output;
-    return { promptTokens: input, completionTokens: output, totalTokens: total };
+    // prompt_cache_hit_tokens is DeepSeek's native field, kept as a defensive fallback.
+    const cached = n(raw.cachedInputTokens) || n(details?.cacheReadTokens) || n(raw.prompt_cache_hit_tokens);
+    const cacheCreate = n(raw.cacheWriteTokens) || n(details?.cacheWriteTokens);
+    return { promptTokens: input, completionTokens: output, totalTokens: total,
+             cachedTokens: cached, cacheCreationTokens: cacheCreate };
   },
 };
 

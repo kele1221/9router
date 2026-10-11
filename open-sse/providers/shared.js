@@ -24,6 +24,12 @@ export function mapStainlessArch() {
 export const ANTHROPIC_API_VERSION = "2023-06-01";
 export const CLAUDE_CLI_VERSION = "2.1.280";
 
+// CommandCode CLI version reported via the x-command-code-version header. The real CLI
+// sends its own package.json version here, and the upstream usage payload shape changed
+// v5->v6 across releases, so a stale claim hides compatibility drift. Source:
+// registry.npmjs.org/command-code dist-tags.latest (checked 2026-10-11).
+export const COMMANDCODE_CLI_VERSION = "1.79.2";
+
 // Shared Claude-compatible API headers (reused across claude-format providers)
 export const CLAUDE_API_HEADERS = {
   "Anthropic-Version": ANTHROPIC_API_VERSION,

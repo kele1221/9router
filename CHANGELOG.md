@@ -1,3 +1,9 @@
+# v0.5.99-k.2 (unreleased)
+
+## Fix
+- **CommandCode caching**: cached input tokens were never recorded. `USAGE_EXTRACTORS.commandcode` read only `inputTokens/outputTokens/totalTokens`, so `cached_tokens` was stored as `0` for all requests and `calculateCostFromTokens()` billed every cache-hit token at the full input rate (measured 14.5x overcharge on a 75k-prompt/72k-cached request at deepseek-v4.1-flash rates). The extractor now reads cache read/write in both AI SDK shapes (`cachedInputTokens` / `inputTokenDetails.cacheReadTokens`, plus DeepSeek's `prompt_cache_hit_tokens`) so an upstream version bump cannot silently zero the counts again. Cache stays a subset of `prompt_tokens`; `reasoningTokens` is intentionally not reported to avoid double-charging output.
+- **CommandCode cache affinity**: `threadId` and `x-session-id` were regenerated with `randomUUID()` on every request, so each turn looked like a new session, could be routed to a cold backend node, and lost the prefix cache a direct connection keeps. Both now use the session id 9router already resolves (`credentials._clientSessionId`), normalized to a valid UUID via the new `toUuidSessionId()` — upstream silently drops non-UUID affinity keys. The body `threadId` and the `x-session-id` header are now byte-identical.
+
 # v0.5.99-k.1 (2026-10-11)
 
 ## Fix

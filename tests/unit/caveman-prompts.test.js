@@ -36,7 +36,14 @@ describe("Caveman prompt coverage", () => {
 
   it("adds preserve-user-language guidance to every level", () => {
     for (const level of LEVEL_KEYS) {
-      expect(CAVEMAN_PROMPTS[level]).toContain("Preserve the user's dominant language");
+      expect(CAVEMAN_PROMPTS[level]).toContain("Reply in the language of the user's most recent message");
+    }
+  });
+
+  it("names no concrete language in the language rule (examples become the candidate set)", () => {
+    for (const level of LEVEL_KEYS) {
+      expect(CAVEMAN_PROMPTS[level]).not.toContain("Vietnamese");
+      expect(CAVEMAN_PROMPTS[level]).not.toContain("reply English");
     }
   });
 

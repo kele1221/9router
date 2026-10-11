@@ -128,7 +128,10 @@ export class BaseExecutor {
       const url = this.buildUrl(model, stream, urlIndex, credentials);
       const transformedBody = this.transformRequest(model, body, stream, credentials, url, format);
       const headers = this.buildHeaders(credentials, stream, url, model, transformedBody);
-      // User per-provider override wins over registry headers (blocked names filtered at the API)
+      // User per-provider override wins over registry headers (blocked names filtered at the API).
+      // NOTE: this also overrides a body-derived header — e.g. commandcode's x-session-id
+      // mirrors body.threadId for cache affinity. An explicit user override intentionally
+      // wins, but the header can then disagree with the body for that provider.
       if (providerOverrides?.headers) Object.assign(headers, providerOverrides.headers);
 
       if (!retryAttemptsByUrl[urlIndex]) retryAttemptsByUrl[urlIndex] = 0;

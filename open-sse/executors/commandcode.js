@@ -3,7 +3,7 @@ import { BaseExecutor } from "./base.js";
 import { PROVIDERS } from "../config/providers.js";
 import { commandCodeToOpenAIResponse } from "../translator/response/commandcode-to-openai.js";
 import { SSE_DONE } from "../utils/sseConstants.js";
-import { toUuidSessionId } from "../utils/sessionManager.js";
+import { toUuidSessionId, toScopedSessionId } from "../utils/sessionManager.js";
 
 /**
  * CommandCodeExecutor — talks to https://api.commandcode.ai/alpha/generate
@@ -30,10 +30,13 @@ export class CommandCodeExecutor extends BaseExecutor {
     // Mirror the threadId the request translator put in the body so both sides of
     // the upstream session-routing key agree byte-for-byte (see §R2 of the task
     // design). Preferring body.threadId keeps them identical even if the two code
-    // paths ever resolve a different source. Signature mirrors BaseExecutor.execute's
-    // call site (base.js) — url/model are unused here but positional.
+    // paths ever resolve a different source. It is already connection-scoped by the
+    // translator, so it is only normalized (idempotent for a uuid), never re-scoped —
+    // re-hashing here would make the header disagree with the body.
+    // Signature mirrors BaseExecutor.execute's call site (base.js) — url/model are
+    // unused here but positional.
     const sessionId = toUuidSessionId(body?.threadId)
-      || toUuidSessionId(credentials?._clientSessionId)
+      || toScopedSessionId(credentials?._clientSessionId, credentials?.connectionId)
       || randomUUID();
     const headers = {
       "Content-Type": "application/json",

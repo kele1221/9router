@@ -140,8 +140,43 @@ export function toUuidSessionId(value) {
     if (m) return m[0].toLowerCase();
 
     // Deterministic derivation: same input always yields the same affinity key.
-    const h = crypto.createHash("sha256").update(v).digest("hex");
+    return hashToUuid(v);
+}
+
+// Derive a stable RFC-4122 UUID from an arbitrary string.
+function hashToUuid(text) {
+    const h = crypto.createHash("sha256").update(text).digest("hex");
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${((parseInt(h[16], 16) & 0x3) | 0x8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+/**
+ * Build an upstream session-affinity key that is SCOPED to one connection.
+ *
+ * Why this exists: the session id handed to us often comes straight from
+ * unauthenticated client input (`x-session-id`, `prompt_cache_key`,
+ * `conversation_id`, …). Forwarding it verbatim as the upstream affinity key
+ * would let any client pin requests onto a chosen backend node shared with
+ * other connections/tenants — a cache-timing side channel plus cross-tenant
+ * cache contention. Mixing the connection id in keeps affinity per-connection
+ * (and still stable across turns), while making the key unforgeable by a client.
+ *
+ * Falls back to the unscoped id when no connection is known (e.g. direct
+ * callers that bypass chatCore), so affinity is not lost outright.
+ *
+ * @param {string} sessionId - resolved session id (may be client-supplied)
+ * @param {string} connectionId - 9router connection/account id, if known
+ * @returns {string|null} lowercase UUID, or null when there is no session id
+ */
+export function toScopedSessionId(sessionId, connectionId) {
+    const v = normalizeSessionId(sessionId);
+    if (!v) return null;
+
+    const conn = normalizeSessionId(connectionId);
+    if (!conn) return toUuidSessionId(v);
+
+    // Always hash the scoped pair, even when the session id is already a uuid,
+    // so the wire value never reveals the client-supplied id verbatim.
+    return hashToUuid(`${conn}:${v}`);
 }
 
 // Extract Claude Code session id from metadata.user_id (_session_{uuid} | JSON {session_id})

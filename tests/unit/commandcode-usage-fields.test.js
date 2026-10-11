@@ -85,14 +85,50 @@ describe("USAGE_EXTRACTORS.commandcode — cache field mapping", () => {
     expect(usage).toEqual({ prompt_tokens: 100, completion_tokens: 7, total_tokens: 107 });
   });
 
-  it("does not produce negative or NaN values for malformed input", () => {
+  it("reads cache counts nested inside inputTokens (no inputTokenDetails sibling)", () => {
+    // Some AI SDK builds put the breakdown on inputTokens itself and omit the
+    // sibling inputTokenDetails object entirely. Missing this shape re-introduces
+    // the silent zero-cache bug. Cache-write is clamped to the prompt remainder.
+    const usage = toOpenAIUsage(
+      {
+        inputTokens: { total: 75000, noCache: 3000, cacheRead: 72000, cacheWrite: 5000 },
+        outputTokens: { total: 400, text: 320, reasoning: 80 },
+      },
+      "commandcode",
+    );
+    expect(usage.prompt_tokens).toBe(75000);
+    expect(usage.prompt_tokens_details.cached_tokens).toBe(72000);
+    expect(usage.prompt_tokens_details.cache_creation_tokens).toBe(3000); // 75000 - 72000
+  });
+
+  it("treats a deliberate cachedInputTokens:0 as absent and falls through", () => {
+    const usage = toOpenAIUsage(
+      { inputTokens: 1000, outputTokens: 5, cachedInputTokens: 0, inputTokenDetails: { cacheReadTokens: 400 } },
+      "commandcode",
+    );
+    expect(usage.prompt_tokens_details.cached_tokens).toBe(400);
+  });
+
+  it("clamps a cache count larger than the prompt instead of over-billing (AC7)", () => {
+    // 999999 cached on a 100-token prompt would floor the non-cached remainder at
+    // 0 (billing the whole prompt at the full rate) and produce a negative
+    // input_tokens for Claude-format clients. Clamp to the prompt size.
     const usage = toOpenAIUsage(
       { inputTokens: 100, outputTokens: 5, cachedInputTokens: 999999 },
       "commandcode",
     );
-    expect(Number.isFinite(usage.prompt_tokens)).toBe(true);
-    expect(usage.prompt_tokens).toBeGreaterThanOrEqual(0);
-    expect(usage.prompt_tokens_details.cached_tokens).toBe(999999);
+    expect(usage.prompt_tokens).toBe(100);
+    expect(usage.prompt_tokens_details.cached_tokens).toBe(100);
+  });
+
+  it("clamps cache-read + cache-write so together they never exceed the prompt", () => {
+    const usage = toOpenAIUsage(
+      { inputTokens: 100, outputTokens: 5, cachedInputTokens: 80, cacheWriteTokens: 90 },
+      "commandcode",
+    );
+    const d = usage.prompt_tokens_details;
+    expect(d.cached_tokens).toBe(80);
+    expect(d.cache_creation_tokens).toBe(20); // 100 - 80 left unbilled
   });
 
   it("does not report reasoning_tokens (avoids double-charging output)", () => {

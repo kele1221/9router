@@ -10,11 +10,16 @@
  * 9router already resolves a stable session id (credentials._clientSessionId).
  * These tests lock in that it is used, that both sides agree, and that the value
  * is always a UUID — upstream silently drops non-UUID threadIds.
+ *
+ * Security: the session id frequently comes straight from client headers
+ * (`x-session-id`, `prompt_cache_key`, …), so the affinity key is scoped by
+ * connection id. Otherwise any client could pin another connection's requests
+ * onto a chosen backend node.
  */
 import { describe, it, expect } from "vitest";
 import { openaiToCommandCodeRequest } from "../../open-sse/translator/request/openai-to-commandcode.js";
 import { CommandCodeExecutor } from "../../open-sse/executors/commandcode.js";
-import { toUuidSessionId } from "../../open-sse/utils/sessionManager.js";
+import { toUuidSessionId, toScopedSessionId } from "../../open-sse/utils/sessionManager.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BODY = { messages: [{ role: "user", content: "hi" }] };
@@ -100,6 +105,46 @@ describe("openaiToCommandCodeRequest — threadId affinity", () => {
     const out = openaiToCommandCodeRequest("deepseek/deepseek-v4.1-flash", BODY, false);
     expect(out.threadId).toMatch(UUID_RE);
     expect(out.params.stream).toBe(false);
+  });
+});
+
+describe("toScopedSessionId — client cannot forge another connection's key (security)", () => {
+  it("gives two connections different keys for the SAME client-supplied session id", () => {
+    const attacker = toScopedSessionId(SAMPLE_UUID, "conn-ATTACKER");
+    const victim = toScopedSessionId(SAMPLE_UUID, "conn-VICTIM");
+    expect(attacker).toMatch(UUID_RE);
+    expect(victim).toMatch(UUID_RE);
+    expect(attacker).not.toBe(victim);
+  });
+
+  it("never leaks the client-supplied id verbatim on the wire", () => {
+    const scoped = toScopedSessionId(SAMPLE_UUID, "conn-1");
+    expect(scoped).not.toBe(SAMPLE_UUID);
+    expect(scoped).not.toContain("conn-1");
+  });
+
+  it("stays stable for one connection across turns", () => {
+    expect(toScopedSessionId("sess-A", "conn-1")).toBe(toScopedSessionId("sess-A", "conn-1"));
+  });
+
+  it("falls back to the unscoped uuid when no connection is known", () => {
+    expect(toScopedSessionId(SAMPLE_UUID, undefined)).toBe(SAMPLE_UUID);
+    expect(toScopedSessionId(SAMPLE_UUID, null)).toBe(SAMPLE_UUID);
+  });
+
+  it("returns null without a session id so callers can fall back to random", () => {
+    expect(toScopedSessionId(null, "conn-1")).toBeNull();
+    expect(toScopedSessionId("", "conn-1")).toBeNull();
+  });
+
+  it("scopes the translator's threadId by connection (AC11)", () => {
+    const base = { _clientSessionId: SAMPLE_UUID };
+    const a = openaiToCommandCodeRequest("m", BODY, true, { ...base, connectionId: "conn-A" });
+    const b = openaiToCommandCodeRequest("m", BODY, true, { ...base, connectionId: "conn-B" });
+    expect(a.threadId).not.toBe(b.threadId);
+    // same connection + same session => stable
+    expect(openaiToCommandCodeRequest("m", BODY, true, { ...base, connectionId: "conn-A" }).threadId)
+      .toBe(a.threadId);
   });
 });
 

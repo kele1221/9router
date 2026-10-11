@@ -16,7 +16,7 @@ import { randomUUID } from "crypto";
 import { ROLE, OPENAI_BLOCK, CLAUDE_BLOCK } from "../schema/index.js";
 import { DEFAULT_MAX_TOKENS } from "../../config/runtimeConfig.js";
 import { parseDataUri, encodeDataUri } from "../concerns/image.js";
-import { toUuidSessionId } from "../../utils/sessionManager.js";
+import { toScopedSessionId } from "../../utils/sessionManager.js";
 
 function flattenText(content) {
   if (content == null) return "";
@@ -208,7 +208,10 @@ export function openaiToCommandCodeRequest(model, body, stream, credentials) {
     // session id 9router already resolved; fall back to a random one only when no
     // session could be determined. Must stay a valid UUID — upstream silently
     // drops non-UUID values (toWireThreadId), which would lose affinity again.
-    threadId: toUuidSessionId(credentials?._clientSessionId) || randomUUID(),
+    // Scoped by connection so a client cannot pin another connection's requests
+    // onto a chosen backend node by forging x-session-id.
+    threadId: toScopedSessionId(credentials?._clientSessionId, credentials?.connectionId)
+      || randomUUID(),
     memory: "",
     config: {
       workingDir: process.cwd(),

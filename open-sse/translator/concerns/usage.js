@@ -58,10 +58,44 @@ const USAGE_EXTRACTORS = {
       cached = n(raw.prompt_eval_cached_count);
     return { promptTokens: input, completionTokens: output, totalTokens: input + output, cachedTokens: cached };
   },
+  // CommandCode (/alpha/generate) streams AI SDK NDJSON, so its usage arrives in the
+  // AI SDK naming rather than any wire format the other extractors see. Shapes seen:
+  //   v5 flat:   { inputTokens:<number>, outputTokens:<number>, totalTokens, cachedInputTokens? }
+  //   v6:        { inputTokens:<number>, outputTokens:<number>, totalTokens,
+  //                inputTokenDetails:{ cacheReadTokens, cacheWriteTokens } }
+  //   nested:    { inputTokens:{ total, noCache, cacheRead, cacheWrite }, outputTokens:{ total } }
+  // All three are read so an upstream upgrade cannot silently zero the cache counts again.
+  // Verified against the published CLI 1.79.2, which reads exactly
+  // `e.inputTokens` + `e.inputTokenDetails?.cacheReadTokens`.
+  //
+  // SUBSET INVARIANT — unlike claude() above, cache read/write are NOT added to prompt:
+  // inputTokens already INCLUDES the cached portion (noCache/cacheRead are a breakdown of
+  // it), and buildUsage()/canonicalizeUsage() document prompt_tokens as cache-inclusive.
+  // Adding them here would double-count the prefix and OVERSTATE cost.
+  //
+  // reasoningTokens is deliberately NOT reported: AI SDK's outputTokens.total already
+  // includes reasoning, while calculateCostFromTokens() adds reasoning_tokens ON TOP of
+  // completion_tokens — reporting it would introduce a new double-charge.
   commandcode(raw) {
-    const input = n(raw.inputTokens), output = n(raw.outputTokens);
+    const inRaw = raw.inputTokens, outRaw = raw.outputTokens;
+    const details = raw.inputTokenDetails;
+    const input = typeof inRaw === "number" ? inRaw : n(inRaw?.total);
+    const output = typeof outRaw === "number" ? outRaw : n(outRaw?.total);
     const total = typeof raw.totalTokens === "number" ? raw.totalTokens : input + output;
-    return { promptTokens: input, completionTokens: output, totalTokens: total };
+    // Cache may arrive as a top-level field (v5), a sibling `inputTokenDetails` (v6),
+    // inline on the nested inputTokens object, or as DeepSeek's native field.
+    const rawCached = n(raw.cachedInputTokens) || n(details?.cacheReadTokens)
+      || n(inRaw?.cacheRead) || n(raw.prompt_cache_hit_tokens);
+    const rawCacheCreate = n(raw.cacheWriteTokens) || n(details?.cacheWriteTokens)
+      || n(inRaw?.cacheWrite);
+    // Clamp cache to the prompt size: a malformed upstream value larger than the prompt
+    // would otherwise floor the non-cached remainder at 0 (over-billing the whole prompt
+    // at the full rate) and emit a negative input_tokens for Claude-format clients.
+    // Cache-write is bounded by whatever the read left unbilled.
+    const cached = Math.max(0, Math.min(rawCached, input));
+    const cacheCreate = Math.max(0, Math.min(rawCacheCreate, input - cached));
+    return { promptTokens: input, completionTokens: output, totalTokens: total,
+             cachedTokens: cached, cacheCreationTokens: cacheCreate };
   },
 };
 

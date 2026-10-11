@@ -1,3 +1,5 @@
+import { COMMANDCODE_CLI_VERSION } from "../shared.js";
+
 export default {
   id: "commandcode",
   priority: 100,
@@ -23,7 +25,7 @@ export default {
     format: "commandcode",
     forceStream: true,
     headers: {
-      "x-command-code-version": "0.25.7",
+      "x-command-code-version": COMMANDCODE_CLI_VERSION,
       "x-cli-environment": "cli",
     },
   },

@@ -16,6 +16,7 @@ import { randomUUID } from "crypto";
 import { ROLE, OPENAI_BLOCK, CLAUDE_BLOCK } from "../schema/index.js";
 import { DEFAULT_MAX_TOKENS } from "../../config/runtimeConfig.js";
 import { parseDataUri, encodeDataUri } from "../concerns/image.js";
+import { toScopedSessionId } from "../../utils/sessionManager.js";
 
 function flattenText(content) {
   if (content == null) return "";
@@ -182,7 +183,7 @@ function convertTools(tools) {
   return result.length ? result : undefined;
 }
 
-export function openaiToCommandCodeRequest(model, body, stream /* , credentials */) {
+export function openaiToCommandCodeRequest(model, body, stream, credentials) {
   const { messages, system } = convertMessages(body.messages);
   const params = {
     model,
@@ -201,7 +202,16 @@ export function openaiToCommandCodeRequest(model, body, stream /* , credentials 
   const today = new Date().toISOString().slice(0, 10);
 
   return {
-    threadId: randomUUID(),
+    // Stable per-conversation affinity key. Upstream pins the server-side prefix
+    // cache to a backend node via threadId (also sent as x-session-id), so a fresh
+    // UUID per request makes every turn a cold, full-prefill request. Prefer the
+    // session id 9router already resolved; fall back to a random one only when no
+    // session could be determined. Must stay a valid UUID — upstream silently
+    // drops non-UUID values (toWireThreadId), which would lose affinity again.
+    // Scoped by connection so a client cannot pin another connection's requests
+    // onto a chosen backend node by forging x-session-id.
+    threadId: toScopedSessionId(credentials?._clientSessionId, credentials?.connectionId)
+      || randomUUID(),
     memory: "",
     config: {
       workingDir: process.cwd(),

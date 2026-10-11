@@ -74,8 +74,12 @@ export async function POST(request) {
 
         const executor = getExecutor(provider);
         const url = executor.buildUrl(model, stream, 0, credentials);
-        const headers = executor.buildHeaders(credentials, stream);
         const finalBody = executor.transformRequest(model, translated, stream, credentials);
+        // Build headers AFTER transformRequest and pass the body, matching
+        // chatCore's call order. Providers that derive a per-request header from
+        // the translated body (e.g. commandcode's x-session-id from threadId)
+        // would otherwise report a header that disagrees with the body.
+        const headers = executor.buildHeaders(credentials, stream, url, model, finalBody);
 
         return NextResponse.json({ success: true, result: { url, headers, body: finalBody } });
       }

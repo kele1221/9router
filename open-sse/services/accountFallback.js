@@ -1,4 +1,4 @@
-import { ERROR_RULES, BACKOFF_CONFIG, getTransientCooldown } from "../config/errorConfig.js";
+import { ERROR_RULES, BACKOFF_CONFIG, getTransientCooldown, isModelLevelError } from "../config/errorConfig.js";
 
 /**
  * Calculate exponential backoff cooldown for rate limits (429)
@@ -18,26 +18,53 @@ export function getQuotaCooldown(backoffLevel = 0) {
  * @param {number} status - HTTP status code
  * @param {string} errorText - Error message text
  * @param {number} backoffLevel - Current backoff level for exponential backoff
- * @returns {{ shouldFallback: boolean, cooldownMs: number, newBackoffLevel?: number }}
+ * @returns {{ shouldFallback: boolean, cooldownMs: number, newBackoffLevel?: number, modelScoped?: boolean }}
  */
 export function checkFallbackError(status, errorText, backoffLevel = 0, provider = null) {
   const lowerError = errorText
     ? (typeof errorText === "string" ? errorText : JSON.stringify(errorText)).toLowerCase()
     : "";
 
+  // Pass 1 — text rules. These describe the *nature* of the failure and must keep
+  // priority over the status-based tables (codex's "model is not supported when
+  // using codex with a chatgpt account" is an account-scoped rule that lives here
+  // and must keep its long cooldown).
   for (const rule of ERROR_RULES) {
     if (rule.provider && rule.provider !== provider) continue;
+    if (!rule.text) continue;
     // Text-based rule: match substring in error message
-    if (rule.text && lowerError && lowerError.includes(rule.text)) {
+    if (lowerError && lowerError.includes(rule.text)) {
       if (rule.backoff) {
         const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
         return { shouldFallback: true, cooldownMs: getQuotaCooldown(newLevel), newBackoffLevel: newLevel };
       }
       return { shouldFallback: true, cooldownMs: rule.cooldownMs };
     }
+  }
 
+  // Model-level errors ("this model does not exist" / "this model name is not
+  // accepted") are a configuration problem, not a credential problem: every
+  // account returns the same answer, so cooling this one down only removes a
+  // healthy connection from rotation (and, with a single connection, makes every
+  // later request in the window fail with a copy of this very error).
+  //
+  // Must sit AFTER the text pass (so account-scoped text rules win) and BEFORE
+  // the status pass — otherwise the blanket `{status: 404}` rule would claim
+  // "model not found" and lock the account for 2 minutes over a stale model id.
+  //
+  // Combo fallback does not read this flag: it calls shouldTryNextModel(), which
+  // treats model-level errors as retryable so one stale combo member cannot fail
+  // the whole turn.
+  if (isModelLevelError(status, errorText)) {
+    return { shouldFallback: false, cooldownMs: 0, modelScoped: true };
+  }
+
+  // Pass 2 — status rules.
+  for (const rule of ERROR_RULES) {
+    if (rule.provider && rule.provider !== provider) continue;
+    if (!rule.status) continue;
     // Status-based rule: match HTTP status code
-    if (rule.status && rule.status === status) {
+    if (rule.status === status) {
       if (rule.backoff) {
         const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
         return { shouldFallback: true, cooldownMs: getQuotaCooldown(newLevel), newBackoffLevel: newLevel };
@@ -62,6 +89,29 @@ export function checkFallbackError(status, errorText, backoffLevel = 0, provider
 
   // Default: transient cooldown for any unmatched error
   return { shouldFallback: true, cooldownMs: getTransientCooldown() };
+}
+
+/**
+ * Decide whether a combo should advance to its NEXT model after a failure.
+ *
+ * This is deliberately a different question from checkFallbackError()'s
+ * "should this account be cooled down". A model-level error (the upstream does
+ * not recognise the model id) must NOT cool the account down — the credential is
+ * healthy — but MUST advance the combo, because trying the next member is the
+ * whole point of a combo and one stale member should not fail the turn.
+ *
+ * Everything account-scoped or transient already advances (checkFallbackError
+ * returns true), so this only widens the decision by the model-level case.
+ *
+ * @param {number} status - HTTP status code
+ * @param {string} errorText - Error message text
+ * @param {number} backoffLevel - Current backoff level (unused unless account-scoped)
+ * @param {string|null} provider - Resolved provider id
+ * @returns {boolean} true when the combo should try its next model
+ */
+export function shouldTryNextModel(status, errorText, backoffLevel = 0, provider = null) {
+  const { shouldFallback } = checkFallbackError(status, errorText, backoffLevel, provider);
+  return shouldFallback || isModelLevelError(status, errorText);
 }
 
 /**

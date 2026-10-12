@@ -36,17 +36,31 @@ export default {
       ],
     },
   },
+  // `cline-pass/*` is its OWN small namespace and is NOT discoverable from
+  // https://api.cline.bot/api/v1/models: that catalog returns 458 ids and contains
+  // ZERO entries with the `cline-pass/` prefix, so resolveClinepassModels() (which
+  // filters on that prefix) always comes back empty and this list cannot be
+  // auto-synced. Composite forms are rejected too — `cline-pass/z-ai/glm-5.2` is
+  // 404 while the bare `z-ai/glm-5.2` only exists on the `cline` provider.
+  // Therefore this list is hand-maintained from live probes. The four entries
+  // previously listed here (`glm-5.2`, `kimi-k2.7-code`, `kimi-k2.6`,
+  // `deepseek-v4-flash`) all answer HTTP 404 "model not found" upstream, and
+  // `deepseek-v4.1-flash` — referenced by the local combo config — was missing.
+  // Every id below was verified 200 at 2026-10-12; re-probe before editing.
   models: [
-    { id: "cline-pass/glm-5.2", name: "GLM-5.2 (ClinePass)" },
-    { id: "cline-pass/kimi-k2.7-code", name: "Kimi K2.7 Code (ClinePass)" },
-    { id: "cline-pass/kimi-k2.6", name: "Kimi K2.6 (ClinePass)" },
     { id: "cline-pass/deepseek-v4-pro", name: "DeepSeek V4 Pro (ClinePass)" },
-    { id: "cline-pass/deepseek-v4-flash", name: "DeepSeek V4 Flash (ClinePass)" },
+    { id: "cline-pass/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash (ClinePass)" },
+    { id: "cline-pass/glm-5.3", name: "GLM-5.3 (ClinePass)" },
+    { id: "cline-pass/glm-5.3-flash", name: "GLM-5.3 Flash (ClinePass)" },
+    { id: "cline-pass/kimi-k3", name: "Kimi K3 (ClinePass)" },
     { id: "cline-pass/mimo-v2.5", name: "MiMo-V2.5 (ClinePass)" },
     { id: "cline-pass/mimo-v2.5-pro", name: "MiMo-V2.5-Pro (ClinePass)" },
+    { id: "cline-pass/mimo-v2.6-flash", name: "MiMo-V2.6-Flash (ClinePass)" },
+    { id: "cline-pass/mimo-v2.6-pro", name: "MiMo-V2.6-Pro (ClinePass)" },
     { id: "cline-pass/minimax-m3", name: "MiniMax M3 (ClinePass)" },
     { id: "cline-pass/qwen3.7-max", name: "Qwen3.7 Max (ClinePass)" },
     { id: "cline-pass/qwen3.7-plus", name: "Qwen3.7 Plus (ClinePass)" },
+    { id: "cline-pass/qwen3.8-max", name: "Qwen3.8 Max (ClinePass)" },
   ],
   oauth: {
     appBaseUrl: "https://app.cline.bot",

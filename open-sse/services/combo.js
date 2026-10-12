@@ -2,7 +2,7 @@
  * Shared combo (model combo) handling with fallback support
  */
 
-import { checkFallbackError, formatRetryAfter } from "./accountFallback.js";
+import { checkFallbackError, shouldTryNextModel, formatRetryAfter } from "./accountFallback.js";
 import { unavailableResponse } from "../utils/error.js";
 import { getCapabilitiesForModel } from "../providers/capabilities.js";
 import { extractTextContent } from "../translator/formats/gemini.js";
@@ -331,10 +331,18 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
         try { errorText = JSON.stringify(errorText); } catch { errorText = String(errorText); }
       }
 
-      // Check if should fallback to next model
+      // Two separate questions, two separate answers:
+      //   - checkFallbackError → "should this ACCOUNT be cooled down?" (drives the
+      //     transient wait below; also tells us whether the failure is account-scoped)
+      //   - shouldTryNextModel → "should this COMBO advance to its next model?"
+      // A model-level error (upstream does not recognise the model id) answers
+      // false/true respectively: the credential is healthy so nothing is locked,
+      // but the next member must still be tried. Reading shouldFallback as the
+      // combo decision made one stale member fail the whole turn.
       const { shouldFallback, cooldownMs } = checkFallbackError(result.status, errorText);
+      const tryNext = shouldTryNextModel(result.status, errorText);
 
-      if (!shouldFallback) {
+      if (!tryNext) {
         log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: result.status });
         return result;
       }
@@ -351,7 +359,13 @@ export async function handleComboChat({ body, models, handleSingleModel, log, co
       // Fallback to next model
       lastError = errorText || String(result.status);
       if (!lastStatus) lastStatus = result.status;
-      log.warn("COMBO", `Model ${modelStr} failed, trying next`, { status: result.status });
+      // Distinguish the two cases in logs: "model-level" means the account stayed
+      // healthy and only this model id was rejected, which is a config problem to
+      // fix in the registry — not a provider outage.
+      log.warn("COMBO", shouldFallback
+        ? `Model ${modelStr} failed, trying next`
+        : `Model ${modelStr} unavailable (model-level ${result.status}), trying next`,
+        { status: result.status });
     } catch (error) {
       // Catch unexpected exceptions to ensure fallback continues
       lastError = error.message || String(error);

@@ -59,7 +59,17 @@ export default {
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
     { id: "deepseek-v4-pro-max", name: "DeepSeek V4 Pro Max", upstreamModelId: "deepseek-v4-pro" },
     { id: "deepseek-v4-pro-none", name: "DeepSeek V4 Pro No Thinking", upstreamModelId: "deepseek-v4-pro" },
-    { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash" },
+    // Upstream renamed this model's GA id: GET https://api.deepseek.com/models now
+    // returns only `deepseek-flash` and `deepseek-v4-pro` (the `deepseek-flash`
+    // entry still reports name "DeepSeek-V4.1-Flash"). Posting the old
+    // `deepseek-v4.1-flash` id is rejected with HTTP 400 "The supported API model
+    // names are deepseek-flash, deepseek-v4-pro, but you passed
+    // deepseek-v4.1-flash" — a MODEL-level error, not a credential one, so it must
+    // not cool the account down (see open-sse/config/errorConfig.js).
+    // Keep the local id (existing combos/aliases reference it) and map it onto the
+    // new upstream name here; capabilities/pricing stay keyed by the local id, so
+    // the 1M context / 384K output metadata is unaffected.
+    { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", upstreamModelId: "deepseek-flash" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" },
     { id: "deepseek-v4-flash-vision-exp", name: "DeepSeek V4 Flash Vision (Exp)" },
     { id: "deepseek-chat", name: "DeepSeek V3.2 Chat" },

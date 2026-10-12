@@ -50,6 +50,7 @@ export const MAX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000;
 
 let _runtimeMarkers = null;
 let _runtimeRules = null;
+let _runtimeModelLevelMarkers = null;
 
 // Some OpenAI-compatible gateways return HTTP 400 while the structured error
 // correctly identifies a rate limit. Normalize these markers before fallback
@@ -69,6 +70,60 @@ export function isRateLimitErrorMarker(value) {
 /** Returns the active rate-limit markers (runtime override or default). */
 export function getAllRateLimitMarkers() {
   return _runtimeMarkers || RATE_LIMIT_ERROR_MARKERS;
+}
+
+// ---------------------------------------------------------------------------
+// Model-level errors
+//
+// An upstream that answers "this model does not exist / this model name is not
+// accepted" is reporting a *configuration* problem: the credential is fine and
+// the request body is fine, only the model id is wrong. That distinction matters
+// because the two consumers of checkFallbackError() need opposite answers:
+//
+//   - account cooldown (src/sse/services/auth.js): do NOT cool the account down.
+//     Switching accounts cannot help (every account returns the same error), so a
+//     lock only removes a healthy connection from rotation and — with a single
+//     connection — makes every later request in the window fail with a copy of
+//     this very error, hiding the real cause.
+//   - combo fallback (open-sse/services/combo.js): DO try the next model. This is
+//     exactly what a combo is for; refusing to advance turns one stale member
+//     into a failed turn even though the other members are healthy.
+//
+// Hence checkFallbackError() stays "not our problem" for these (no cooldown) and
+// shouldTryNextModel() returns true for them.
+//
+// NOTE: "model is not supported" is deliberately NOT a marker. Codex answers
+// "model is not supported when using codex with a chatgpt account", which is an
+// ACCOUNT-scoped rule (ERROR_RULES[0]) that must keep its 30-minute cooldown.
+// Only statuses 400/404/422 are treated as model-level, and the ERROR_RULES text
+// rules are matched before this check, so that codex rule still wins.
+export const MODEL_LEVEL_ERROR_STATUSES = Object.freeze([400, 404, 422]);
+
+export const MODEL_LEVEL_ERROR_MARKERS = Object.freeze([
+  "model not found",
+  "model_not_found",
+  // DeepSeek: "The supported API model names are deepseek-flash, deepseek-v4-pro,
+  // but you passed deepseek-v4.1-flash."
+  "supported api model names",
+  "unknown model",
+  "invalid model",
+  "no such model",
+  "unsupported model",
+]);
+
+export function isModelLevelError(status, errorText) {
+  if (!MODEL_LEVEL_ERROR_STATUSES.includes(Number(status))) return false;
+  if (!errorText) return false;
+  const lower = typeof errorText === "string" ? errorText : JSON.stringify(errorText);
+  if (!lower) return false;
+  const markers = _runtimeModelLevelMarkers || MODEL_LEVEL_ERROR_MARKERS;
+  const haystack = lower.toLowerCase();
+  return markers.some((marker) => haystack.includes(marker));
+}
+
+/** Returns the active model-level markers (runtime override or default). */
+export function getAllModelLevelErrorMarkers() {
+  return _runtimeModelLevelMarkers || MODEL_LEVEL_ERROR_MARKERS;
 }
 
 // Cooldown durations (ms)
@@ -128,6 +183,7 @@ export const COOLDOWN_MS = {
  * @param {object}  [config.backoffConfig] - Override for BACKOFF_CONFIG props
  * @param {number}  [config.transientCooldownMs] - Override for TRANSIENT_COOLDOWN_MS
  * @param {number}  [config.maxRateLimitCooldownMs] - Override for MAX_RATE_LIMIT_COOLDOWN_MS
+ * @param {string[]} [config.modelLevelErrorMarkers] - Override for model-level error markers
  */
 export function setRuntimeErrorConfig(config) {
   if (!config) return;
@@ -135,6 +191,12 @@ export function setRuntimeErrorConfig(config) {
   if (Array.isArray(config.rateLimitMarkers) && config.rateLimitMarkers.length > 0) {
     _runtimeMarkers = Object.freeze(
       config.rateLimitMarkers.map((m) => m.trim().toLowerCase()).filter(Boolean),
+    );
+  }
+
+  if (Array.isArray(config.modelLevelErrorMarkers) && config.modelLevelErrorMarkers.length > 0) {
+    _runtimeModelLevelMarkers = Object.freeze(
+      config.modelLevelErrorMarkers.map((m) => m.trim().toLowerCase()).filter(Boolean),
     );
   }
 

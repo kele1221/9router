@@ -37,6 +37,7 @@ export { parseModel, resolveModelAliasFromMap, getModelInfoCore } from "./servic
 
 export {
   checkFallbackError,
+  shouldTryNextModel,
   isAccountUnavailable,
   getUnavailableUntil,
   filterAvailableAccounts

@@ -85,3 +85,22 @@ discards the cache a direct connection would keep.
 - Don't leave a bespoke protocol's usage/cache fields unmapped — see the cache section above
 - Don't generate a per-request random value for any field that upstream uses for
   session affinity or cache routing
+### Known limitations of the scoped affinity key
+
+- **Header-less clients.** When no client session header/body field exists,
+  `resolveSessionIdentity()` falls back to `assistantTextSessionId(scope:connectionId, body)`
+  (a per-connection key derived from assistant text) or `deriveSessionId(connectionId)`
+  (per-connection). Turn 1 of a fresh conversation therefore differs from turn 2+, and two
+  conversations on one connection share a key. The scoping fix turns "random every request"
+  into "stable, connection-scoped"; it does not make the key per-conversation. Clients that
+  send a session header (`x-claude-code-session-id`, `x-session-id`, `prompt_cache_key`, …)
+  get true per-conversation affinity.
+- **Missing `connectionId`.** `deriveSessionId(undefined)` yields a fresh value per call, so
+  affinity is silently lost while still looking stable. In the normal chat path
+  (`chatCore` → `credentials.connectionId`) it is always present.
+- **User header overrides win.** `providerOverrides.headers` is applied after
+  `buildHeaders()` in `base.js`, so an explicit `x-session-id` override intentionally
+  overrides the body-derived value and the two can disagree for that request.
+
+Changing the derivation itself is deliberately out of scope here — `sessionManager` is
+shared by 40+ providers and any change has a much wider blast radius than this provider.

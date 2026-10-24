@@ -22,5 +22,6 @@ Before writing code in `open-sse/`:
 - [Translator Conventions](translator-conventions.md)
 - [Executor Conventions](executor-conventions.md)
 - [Provider Registry](provider-registry.md)
+- [ClinePass Upstream Pin](clinepass-upstream-pin.md)
 - [Error → Fallback Semantics](error-fallback-semantics.md)
 - [RTK (Request Token Killer)](rtk.md)

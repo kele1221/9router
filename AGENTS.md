@@ -97,6 +97,11 @@ Pre-translate hooks that compress `tool_result` content in-place to cut tokens. 
 - Binary/protobuf upstreams (kiro EventStream, cursor protobuf, commandcode NDJSON) don't round-trip through OpenAI — they're handled inside their own executor, not the translator.
 - Versioning: root and `cli/` are versioned independently; changes are logged in `CHANGELOG.md`. Commit style is Conventional Commits (`fix(translator): …`, `feat(...)`).
 
+## 本地服务约束
+
+- `./restart.sh` 会中断正在使用的 9router 服务；未经用户明确授权，不执行该脚本，也不得以其他方式重启、终止或中断服务。
+- 修改后只运行 `npm run build`；构建完成后告知用户，由用户决定何时重启。
+
 ## Trellis 使用策略
 
 - 默认不使用 Trellis；简单问答、单文件小改动、局部修复、常规验证和短任务直接处理。

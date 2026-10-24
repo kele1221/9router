@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createProviderNode, getProviderNodes } from "@/models";
 import { OPENAI_COMPATIBLE_PREFIX, ANTHROPIC_COMPATIBLE_PREFIX, CUSTOM_EMBEDDING_PREFIX } from "@/shared/constants/providers";
 import { generateId } from "@/shared/utils";
+import { sanitizeIconFields } from "./iconFields.js";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "Prefix is required" }, { status: 400 });
     }
 
+    // UI-only icon fields (preset id or uploaded data URL).
+    const { icon, iconColor, textIcon } = sanitizeIconFields(body);
+
     // Determine type
     const nodeType = type || "openai-compatible";
 
@@ -57,6 +61,9 @@ export async function POST(request) {
         apiType,
         baseUrl: (baseUrl || OPENAI_COMPATIBLE_DEFAULTS.baseUrl).trim(),
         name: name.trim(),
+        icon,
+        iconColor,
+        textIcon,
       });
       return NextResponse.json({ node }, { status: 201 });
     }
@@ -74,6 +81,9 @@ export async function POST(request) {
         prefix: prefix.trim(),
         baseUrl: sanitizedBaseUrl,
         name: name.trim(),
+        icon,
+        iconColor,
+        textIcon,
       });
       return NextResponse.json({ node }, { status: 201 });
     }
@@ -92,6 +102,9 @@ export async function POST(request) {
         prefix: prefix.trim(),
         baseUrl: sanitizedBaseUrl,
         name: name.trim(),
+        icon,
+        iconColor,
+        textIcon,
       });
       return NextResponse.json({ node }, { status: 201 });
     }

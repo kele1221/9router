@@ -12,7 +12,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { AI_PROVIDERS } from "@/shared/constants/providers";
-import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/providerIcon";
+import { getProviderIconSrc, markProviderIconMissing, resolveCustomProviderIcon } from "@/shared/utils/providerIcon";
+import { DEFAULT_NODE_COLORS, DEFAULT_NODE_TEXT_ICONS } from "@/shared/constants/providerIconPresets";
 
 // Force-stop FE animation if a provider stays active longer than this
 const FE_ACTIVE_TIMEOUT_MS = 60000;
@@ -260,7 +261,7 @@ const nodeTypes = { provider: ProviderNode, router: RouterNode };
 const edgeTypes = { topology: TopologyEdge };
 
 // Place N nodes evenly along an ellipse around the router center.
-function buildLayout(providers, activeSet, lastSet, errorSet) {
+function buildLayout(providers, activeSet, lastSet, errorSet, nodeIconMap = {}) {
   const nodeW = 180;
   const nodeH = 30;
   const routerW = 120;
@@ -304,11 +305,15 @@ function buildLayout(providers, activeSet, lastSet, errorSet) {
     const last = !active && lastSet.has(p.provider?.toLowerCase());
     const error = !active && errorSet.has(p.provider?.toLowerCase());
     const nodeId = `provider-${p.provider}`;
+    // Custom nodes carry their own icon (uploaded data URL / preset id / brand
+    // fallback). For real providers, fall back to the stock /providers/{id}.png.
+    const node = nodeIconMap[p.provider];
+    const nodeIcon = node ? resolveCustomProviderIcon(node) : null;
     const data = {
       label: (config.name !== p.provider ? config.name : null) || p.nodeName || p.name || p.provider,
-      color: config.color || "#6b7280",
-      imageUrl: getProviderImageUrl(p.provider),
-      textIcon: config.textIcon || (p.provider || "?").slice(0, 2).toUpperCase(),
+      color: node?.iconColor || (node ? DEFAULT_NODE_COLORS[node.type] : null) || config.color || "#6b7280",
+      imageUrl: nodeIcon || (node ? null : getProviderImageUrl(p.provider)),
+      textIcon: node?.textIcon || (node ? DEFAULT_NODE_TEXT_ICONS[node.type] : null) || config.textIcon || (p.provider || "?").slice(0, 2).toUpperCase(),
       active,
     };
 
@@ -354,7 +359,7 @@ function buildLayout(providers, activeSet, lastSet, errorSet) {
   return { nodes, edges };
 }
 
-export default function ProviderTopology({ providers = [], activeRequests = [], lastProvider = "", errorProvider = "" }) {
+export default function ProviderTopology({ providers = [], nodeIconMap = {}, activeRequests = [], lastProvider = "", errorProvider = "" }) {
   // Serialize to stable string keys so useMemo only re-runs when values actually change
   const activeKey = useMemo(
     () => activeRequests.map((r) => r.provider?.toLowerCase()).filter(Boolean).sort().join(","),
@@ -399,8 +404,8 @@ export default function ProviderTopology({ providers = [], activeRequests = [], 
   }, [rawActiveSet, tick]);
 
   const { nodes, edges } = useMemo(
-    () => buildLayout(providers, activeSet, lastSet, errorSet),
-    [providers, activeSet, lastSet, errorSet]
+    () => buildLayout(providers, activeSet, lastSet, errorSet, nodeIconMap),
+    [providers, activeSet, lastSet, errorSet, nodeIconMap]
   );
 
   // Stable key — only remount when provider list changes
@@ -477,6 +482,7 @@ ProviderTopology.propTypes = {
     provider: PropTypes.string,
     name: PropTypes.string,
   })),
+  nodeIconMap: PropTypes.object,
   activeRequests: PropTypes.arrayOf(PropTypes.shape({
     provider: PropTypes.string,
     model: PropTypes.string,

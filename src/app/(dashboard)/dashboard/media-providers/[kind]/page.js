@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, Badge, Button, Toggle, AddCustomEmbeddingModal } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
+import { resolveNodeIconSrc } from "@/shared/utils/providerIcon";
 import { MEDIA_PROVIDER_KINDS, AI_PROVIDERS, getProvidersByKind } from "@/shared/constants/providers";
 
 // Kinds that support combos (currently disabled for image/tts — temporarily hidden).
@@ -58,15 +59,18 @@ function MediaProviderCard({ provider, kind, connections, isCustom, onToggle }) 
           <div className="flex min-w-0 items-center gap-3">
             <div
               className="size-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ backgroundColor: `${provider.color?.length > 7 ? provider.color : (provider.color ?? "#888") + "15"}` }}
+              style={{ backgroundColor: (() => {
+                const c = provider.iconColor || provider.color || "#888";
+                return `${c.length > 7 ? c : c + "15"}`;
+              })() }}
             >
               <ProviderIcon
-                src={`/providers/${provider.id}.png`}
+                src={resolveNodeIconSrc(provider.icon) || `/providers/${provider.id}.png`}
                 alt={provider.name}
                 size={30}
                 className="object-contain rounded-lg max-w-[30px] max-h-[30px]"
                 fallbackText={provider.textIcon || provider.id.slice(0, 2).toUpperCase()}
-                fallbackColor={provider.color}
+                fallbackColor={provider.iconColor || provider.color}
               />
             </div>
             <div className="min-w-0">
@@ -186,7 +190,9 @@ export default function MediaProviderKindPage() {
     id: n.id,
     name: n.name || "Custom Embedding",
     color: "#6366F1",
-    textIcon: "CE",
+    icon: n.icon,
+    iconColor: n.iconColor,
+    textIcon: n.textIcon || "CE",
   }));
 
   const allProviders = [...providers, ...customProviders];

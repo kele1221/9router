@@ -62,6 +62,13 @@ export async function createProviderNode(data) {
     prefix: data.prefix,
     apiType: data.apiType,
     baseUrl: data.baseUrl,
+    // UI-only fields (persisted in the JSON `data` column via nodeToRow).
+    // `icon` is either a preset provider id (→ /providers/{id}.png) or a
+    // `data:` URL for a user-uploaded image. `iconColor`/`textIcon` drive the
+    // chip background and the initials fallback.
+    icon: data.icon,
+    iconColor: data.iconColor,
+    textIcon: data.textIcon,
     createdAt: now,
     updatedAt: now,
   };

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { deleteProviderConnectionsByProvider, deleteProviderNode, getProviderConnections, getProviderNodeById, updateProviderConnection, updateProviderNode } from "@/models";
+import { sanitizeIconFields } from "../iconFields.js";
 
 // PUT /api/provider-nodes/[id] - Update provider node
 export async function PUT(request, { params }) {
@@ -57,6 +58,13 @@ export async function PUT(request, { params }) {
     if (node.type === "openai-compatible") {
       updates.apiType = apiType;
     }
+
+    // UI-only icon fields. Three-state: undefined (absent) → preserve the
+    // stored value; null → clear it; string → store the sanitized value.
+    const { icon, iconColor, textIcon } = sanitizeIconFields(body);
+    if (icon !== undefined) updates.icon = icon;
+    if (iconColor !== undefined) updates.iconColor = iconColor;
+    if (textIcon !== undefined) updates.textIcon = textIcon;
 
     const updated = await updateProviderNode(id, updates);
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { getProviderIconSrc, markProviderIconMissing } from "@/shared/utils/providerIcon";
+import { getProviderIconSrc, markProviderIconMissing, resolveNodeIconSrc } from "@/shared/utils/providerIcon";
 import { Card, Button, Badge, Input, Modal, CardSkeleton, OAuthModal, KiroOAuthWrapper, CursorAuthModal, ZedAuthModal, XiaomiMimoAuthModal, IFlowCookieModal, GitLabAuthModal, Toggle, Select, EditConnectionModal, NoAuthProxyCard, ConfirmModal } from "@/shared/components";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, getProviderAlias, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS } from "@/shared/constants/providers";
 import { getModelsByProviderId, getModelKind } from "@/shared/constants/models";
@@ -145,7 +145,9 @@ export default function ProviderDetailPage() {
         id: providerNode.id,
         name: providerNode.name || (providerNode.type === "anthropic-compatible" ? "Anthropic Compatible" : "OpenAI Compatible"),
         color: providerNode.type === "anthropic-compatible" ? "#D97757" : "#10A37F",
-        textIcon: providerNode.type === "anthropic-compatible" ? "AC" : "OC",
+        icon: providerNode.icon,
+        iconColor: providerNode.iconColor || (providerNode.type === "anthropic-compatible" ? "#D97757" : "#10A37F"),
+        textIcon: providerNode.textIcon || (providerNode.type === "anthropic-compatible" ? "AC" : "OC"),
         apiType: providerNode.apiType,
         baseUrl: providerNode.baseUrl,
         type: providerNode.type,
@@ -1355,7 +1357,12 @@ export default function ProviderDetailPage() {
 
   // Determine icon path: OpenAI Compatible providers use specialized icons
   const getHeaderIconPath = () => {
-    if (isOpenAICompatible && providerInfo.apiType) {
+    // Custom node icon (preset id or uploaded data URL) wins first.
+    const custom = resolveNodeIconSrc(providerInfo.icon);
+    if (custom) return custom;
+    // Custom compatible nodes never have a /providers/{nodeId}.png file, so
+    // resolve them to the generic brand mark regardless of apiType presence.
+    if (isOpenAICompatible) {
       return providerInfo.apiType === "responses" ? "/providers/oai-r.png" : "/providers/oai-cc.png";
     }
     if (isAnthropicCompatible) {
@@ -1378,28 +1385,52 @@ export default function ProviderDetailPage() {
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <div
             className="flex size-12 shrink-0 items-center justify-center rounded-lg"
-            style={{ backgroundColor: `${providerInfo.color}15` }}
+            style={{ backgroundColor: `${providerInfo.iconColor || providerInfo.color}15` }}
           >
-            {headerImgError || !getHeaderIconPath() ? (
-              <span className="text-sm font-bold" style={{ color: providerInfo.color }}>
-                {providerInfo.textIcon || providerInfo.id.slice(0, 2).toUpperCase()}
-              </span>
-            ) : (
-              <Image
-                src={getHeaderIconPath()}
-                alt={providerInfo.name}
-                width={48}
-                height={48}
-                className="max-h-12 max-w-12 rounded-lg object-contain"
-                sizes="48px"
-                onError={() => {
-                  markProviderIconMissing(providerInfo.id);
-                  setHeaderImgError(true);
-                }}
-              loading="lazy"
-              decoding="async"
-              />
-            )}
+            {(() => {
+              const iconSrc = getHeaderIconPath();
+              if (headerImgError || !iconSrc) {
+                return (
+                  <span className="text-sm font-bold" style={{ color: providerInfo.iconColor || providerInfo.color }}>
+                    {providerInfo.textIcon || providerInfo.id.slice(0, 2).toUpperCase()}
+                  </span>
+                );
+              }
+              // Uploaded icons are inline data URLs — next/image does not optimize
+              // those reliably, so render a plain <img> for them and keep next/image
+              // for the static /providers/*.png brand icons.
+              if (iconSrc.startsWith("data:")) {
+                return (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={iconSrc}
+                    alt={providerInfo.name}
+                    width={48}
+                    height={48}
+                    className="max-h-12 max-w-12 rounded-lg object-contain"
+                    loading="lazy"
+                    decoding="async"
+                    onError={() => setHeaderImgError(true)}
+                  />
+                );
+              }
+              return (
+                <Image
+                  src={iconSrc}
+                  alt={providerInfo.name}
+                  width={48}
+                  height={48}
+                  className="max-h-12 max-w-12 rounded-lg object-contain"
+                  sizes="48px"
+                  onError={() => {
+                    markProviderIconMissing(providerInfo.id);
+                    setHeaderImgError(true);
+                  }}
+                  loading="lazy"
+                  decoding="async"
+                />
+              );
+            })()}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-3 flex-wrap">

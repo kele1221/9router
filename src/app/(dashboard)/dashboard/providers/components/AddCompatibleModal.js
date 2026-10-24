@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { Badge, Button, Input, Modal, Select } from "@/shared/components";
+import { Badge, Button, Input, Modal, Select, ProviderIconPicker } from "@/shared/components";
+import {
+  DEFAULT_NODE_COLORS,
+  DEFAULT_NODE_TEXT_ICONS,
+} from "@/shared/constants/providerIconPresets";
 
 const VARIANT_CONFIG = {
   openai: {
@@ -15,6 +19,8 @@ const VARIANT_CONFIG = {
     modelIdPlaceholder: "e.g. gpt-4, claude-3-opus",
     errorLabel: "OpenAI Compatible",
     hasApiType: true,
+    defaultColor: DEFAULT_NODE_COLORS["openai-compatible"],
+    defaultTextIcon: DEFAULT_NODE_TEXT_ICONS["openai-compatible"],
   },
   anthropic: {
     title: "Add Anthropic Compatible",
@@ -26,6 +32,8 @@ const VARIANT_CONFIG = {
     modelIdPlaceholder: "e.g. claude-3-opus",
     errorLabel: "Anthropic Compatible",
     hasApiType: false,
+    defaultColor: DEFAULT_NODE_COLORS["anthropic-compatible"],
+    defaultTextIcon: DEFAULT_NODE_TEXT_ICONS["anthropic-compatible"],
   },
 };
 
@@ -41,6 +49,9 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
     prefix: "",
     ...(config.hasApiType ? { apiType: "chat" } : {}),
     baseUrl: config.defaultBaseUrl,
+    icon: null,
+    iconColor: null,
+    textIcon: null,
   });
 
   const [formData, setFormData] = useState(initialFormData);
@@ -61,6 +72,14 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
     }
   }, [config.hasApiType ? formData.apiType : isOpen]);
 
+  const setIconState = (next) =>
+    setFormData((prev) => ({
+      ...prev,
+      icon: next.icon,
+      iconColor: next.iconColor,
+      textIcon: next.textIcon,
+    }));
+
   const handleSubmit = async () => {
     if (!formData.name.trim() || !formData.prefix.trim() || !formData.baseUrl.trim()) return;
     setSubmitting(true);
@@ -74,6 +93,9 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           ...(config.hasApiType ? { apiType: formData.apiType } : {}),
           baseUrl: formData.baseUrl,
           type: config.type,
+          icon: formData.icon || undefined,
+          iconColor: formData.iconColor || undefined,
+          textIcon: formData.textIcon || undefined,
         }),
       });
       const data = await res.json();
@@ -142,6 +164,14 @@ function AddCompatibleModal({ variant, isOpen, onClose, onCreated }) {
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder={config.namePlaceholder}
           hint="Required. A friendly label for this node."
+        />
+        <ProviderIconPicker
+          label="Icon"
+          value={{ icon: formData.icon, iconColor: formData.iconColor, textIcon: formData.textIcon }}
+          onChange={setIconState}
+          defaultColor={config.defaultColor}
+          defaultTextIcon={config.defaultTextIcon}
+          name={formData.name}
         />
         <Input
           label="Prefix"

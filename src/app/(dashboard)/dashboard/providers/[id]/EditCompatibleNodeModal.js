@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { Button, Badge, Input, Modal, Select } from "@/shared/components";
+import { Button, Badge, Input, Modal, Select, ProviderIconPicker } from "@/shared/components";
+import {
+  DEFAULT_NODE_COLORS,
+  DEFAULT_NODE_TEXT_ICONS,
+} from "@/shared/constants/providerIconPresets";
 
 export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose, isAnthropic }) {
   const [formData, setFormData] = useState({
@@ -10,12 +14,22 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
     prefix: "",
     apiType: "chat",
     baseUrl: "https://api.openai.com/v1",
+    icon: null,
+    iconColor: null,
+    textIcon: null,
   });
   const [saving, setSaving] = useState(false);
   const [checkKey, setCheckKey] = useState("");
   const [checkModelId, setCheckModelId] = useState("");
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
+
+  const defaultColor = isAnthropic
+    ? DEFAULT_NODE_COLORS["anthropic-compatible"]
+    : DEFAULT_NODE_COLORS["openai-compatible"];
+  const defaultTextIcon = isAnthropic
+    ? DEFAULT_NODE_TEXT_ICONS["anthropic-compatible"]
+    : DEFAULT_NODE_TEXT_ICONS["openai-compatible"];
 
   useEffect(() => {
     if (node) {
@@ -24,6 +38,9 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         prefix: node.prefix || "",
         apiType: node.apiType || "chat",
         baseUrl: node.baseUrl || (isAnthropic ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1"),
+        icon: node.icon ?? null,
+        iconColor: node.iconColor ?? null,
+        textIcon: node.textIcon ?? null,
       });
     }
   }, [node, isAnthropic]);
@@ -33,6 +50,14 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
     { value: "responses", label: "Responses API" },
   ];
 
+  const setIconState = (next) =>
+    setFormData((prev) => ({
+      ...prev,
+      icon: next.icon,
+      iconColor: next.iconColor,
+      textIcon: next.textIcon,
+    }));
+
   const handleSubmit = async () => {
     if (!formData.name.trim() || !formData.prefix.trim() || !formData.baseUrl.trim()) return;
     setSaving(true);
@@ -41,6 +66,11 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
         name: formData.name,
         prefix: formData.prefix,
         baseUrl: formData.baseUrl,
+        // Send raw values (null = clear, string = set) so the PUT route's
+        // three-state logic can persist a user-chosen icon or an explicit clear.
+        icon: formData.icon,
+        iconColor: formData.iconColor,
+        textIcon: formData.textIcon,
       };
       if (!isAnthropic) {
         payload.apiType = formData.apiType;
@@ -84,6 +114,14 @@ export default function EditCompatibleNodeModal({ isOpen, node, onSave, onClose,
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder={`${isAnthropic ? "Anthropic" : "OpenAI"} Compatible (Prod)`}
           hint="Required. A friendly label for this node."
+        />
+        <ProviderIconPicker
+          label="Icon"
+          value={{ icon: formData.icon, iconColor: formData.iconColor, textIcon: formData.textIcon }}
+          onChange={setIconState}
+          defaultColor={defaultColor}
+          defaultTextIcon={defaultTextIcon}
+          name={formData.name}
         />
         <Input
           label="Prefix"
@@ -154,6 +192,9 @@ EditCompatibleNodeModal.propTypes = {
     prefix: PropTypes.string,
     apiType: PropTypes.string,
     baseUrl: PropTypes.string,
+    icon: PropTypes.string,
+    iconColor: PropTypes.string,
+    textIcon: PropTypes.string,
   }),
   onSave: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,

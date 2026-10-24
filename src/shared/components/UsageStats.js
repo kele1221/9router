@@ -223,6 +223,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
   const [viewMode, setViewMode] = useState("costs");
   const [providers, setProviders] = useState([]);
   const [nodeNameMap, setNodeNameMap] = useState({});
+  const [nodeIconMap, setNodeIconMap] = useState({});
   const [periodLocal, setPeriodLocal] = useState("today");
   const isInitialLoad = useRef(true);
   const hasLoadedStats = useRef(false);
@@ -238,10 +239,21 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       fetch("/api/settings").then((r) => r.ok ? r.json() : null),
     ])
       .then(([d, nodesData, settings]) => {
-        // Build node name lookup for custom providers
+        // Build lookups for custom provider nodes: names + icon fields, so the
+        // usage topology and recent-requests list can render their chosen icon
+        // (uploaded data URL / preset id / brand fallback) instead of the
+        // generic node-id path that 404s.
         const nodeNameMap = {};
+        const nodeIconMap = {};
         for (const node of (nodesData?.nodes || [])) {
           nodeNameMap[node.id] = node.name;
+          nodeIconMap[node.id] = {
+            icon: node.icon,
+            type: node.type,
+            apiType: node.apiType,
+            iconColor: node.iconColor,
+            textIcon: node.textIcon,
+          };
         }
         const seen = new Set();
         const unique = (d?.connections || []).filter((c) => {
@@ -260,6 +272,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
           .map((p) => ({ provider: p.id, name: p.name }));
         setProviders([...unique, ...noAuthProviders]);
         setNodeNameMap(nodeNameMap);
+        setNodeIconMap(nodeIconMap);
       })
       .catch(() => {});
   }, []);
@@ -489,6 +502,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
         <div className="grid min-w-0 grid-cols-1 items-stretch gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
           <ProviderTopology
             providers={providers}
+            nodeIconMap={nodeIconMap}
             activeRequests={stats.activeRequests || []}
             lastProvider={stats.recentRequests?.[0]?.provider || ""}
             errorProvider={stats.errorProvider || ""}

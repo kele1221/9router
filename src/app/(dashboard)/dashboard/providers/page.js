@@ -10,7 +10,7 @@ import {
   Toggle,
 } from "@/shared/components";
 import ProviderIcon from "@/shared/components/ProviderIcon";
-import { getProviderIconSrc } from "@/shared/utils/providerIcon";
+import { getProviderIconSrc, resolveNodeIconSrc } from "@/shared/utils/providerIcon";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS } from "@/shared/constants/config";
 import {
   FREE_PROVIDERS,
@@ -290,7 +290,9 @@ export default function ProvidersPage() {
       id: node.id,
       name: node.name || "OpenAI Compatible",
       color: "#10A37F",
-      textIcon: "OC",
+      icon: node.icon,
+      iconColor: node.iconColor,
+      textIcon: node.textIcon || "OC",
       apiType: node.apiType,
     }))
     .filter(
@@ -303,7 +305,9 @@ export default function ProvidersPage() {
       id: node.id,
       name: node.name || "Anthropic Compatible",
       color: "#D97757",
-      textIcon: "AC",
+      icon: node.icon,
+      iconColor: node.iconColor,
+      textIcon: node.textIcon || "AC",
     }))
     .filter(
       (p) => matchSearch(p.name) && matchStatus(getProviderStats(p.id, "apikey")),
@@ -842,6 +846,8 @@ function ApiKeyProviderCard({
     ANTHROPIC_COMPATIBLE_PREFIX,
   );
 
+  const chipColor = provider.iconColor || provider.color;
+
   const dotColors = {
     free: "bg-green-500",
     oauth: "bg-blue-500",
@@ -856,7 +862,12 @@ function ApiKeyProviderCard({
   };
 
   const getIconPath = () => {
-    if (isCompatible && provider.apiType)
+    // Custom node icon (preset id or uploaded data URL) wins first.
+    const custom = resolveNodeIconSrc(provider.icon);
+    if (custom) return custom;
+    // Custom compatible nodes never have a /providers/{nodeId}.png file, so
+    // resolve them to the generic brand mark regardless of apiType presence.
+    if (isCompatible)
       return provider.apiType === "responses"
         ? "/providers/oai-r.png"
         : "/providers/oai-cc.png";
@@ -875,7 +886,7 @@ function ApiKeyProviderCard({
             <div
               className="size-8 shrink-0 rounded-lg flex items-center justify-center"
               style={{
-                backgroundColor: `${provider.color?.length > 7 ? provider.color : provider.color + "15"}`,
+                backgroundColor: `${chipColor?.length > 7 ? chipColor : chipColor + "15"}`,
               }}
             >
               <ProviderIcon
@@ -886,7 +897,7 @@ function ApiKeyProviderCard({
                 fallbackText={
                   provider.textIcon || provider.id.slice(0, 2).toUpperCase()
                 }
-                fallbackColor={provider.color}
+                fallbackColor={chipColor}
               />
             </div>
             <div className="min-w-0">

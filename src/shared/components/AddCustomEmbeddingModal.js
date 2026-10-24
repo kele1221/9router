@@ -2,9 +2,15 @@
 
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
-import { Modal, Input, Button, Badge } from "@/shared/components";
+import { Modal, Input, Button, Badge, ProviderIconPicker } from "@/shared/components";
+import {
+  DEFAULT_NODE_COLORS,
+  DEFAULT_NODE_TEXT_ICONS,
+} from "@/shared/constants/providerIconPresets";
 
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_COLOR = DEFAULT_NODE_COLORS["custom-embedding"];
+const DEFAULT_TEXT_ICON = DEFAULT_NODE_TEXT_ICONS["custom-embedding"];
 
 // Dual-mode modal: edit when `node` provided, add otherwise
 export default function AddCustomEmbeddingModal({ isOpen, onClose, onCreated, onSaved, node }) {
@@ -13,6 +19,9 @@ export default function AddCustomEmbeddingModal({ isOpen, onClose, onCreated, on
     name: "",
     prefix: "",
     baseUrl: DEFAULT_BASE_URL,
+    icon: null,
+    iconColor: null,
+    textIcon: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [checkKey, setCheckKey] = useState("");
@@ -30,11 +39,29 @@ export default function AddCustomEmbeddingModal({ isOpen, onClose, onCreated, on
         name: node.name || "",
         prefix: node.prefix || "",
         baseUrl: node.baseUrl || DEFAULT_BASE_URL,
+        icon: node.icon ?? null,
+        iconColor: node.iconColor ?? null,
+        textIcon: node.textIcon ?? null,
       });
     } else {
-      setFormData({ name: "", prefix: "", baseUrl: DEFAULT_BASE_URL });
+      setFormData({
+        name: "",
+        prefix: "",
+        baseUrl: DEFAULT_BASE_URL,
+        icon: null,
+        iconColor: null,
+        textIcon: null,
+      });
     }
   }, [isOpen, isEdit, node]);
+
+  const setIconState = (next) =>
+    setFormData((prev) => ({
+      ...prev,
+      icon: next.icon,
+      iconColor: next.iconColor,
+      textIcon: next.textIcon,
+    }));
 
   const handleSubmit = async () => {
     if (!formData.name.trim() || !formData.prefix.trim() || !formData.baseUrl.trim()) return;
@@ -48,6 +75,10 @@ export default function AddCustomEmbeddingModal({ isOpen, onClose, onCreated, on
         baseUrl: formData.baseUrl,
       };
       if (!isEdit) payload.type = "custom-embedding";
+      // null = clear, string = set (PUT three-state); create omits empty.
+      payload.icon = formData.icon;
+      payload.iconColor = formData.iconColor;
+      payload.textIcon = formData.textIcon;
 
       const res = await fetch(url, {
         method,
@@ -117,6 +148,14 @@ export default function AddCustomEmbeddingModal({ isOpen, onClose, onCreated, on
           placeholder="Voyage AI"
           hint="Required. A friendly label for this embedding provider."
         />
+        <ProviderIconPicker
+          label="Icon"
+          value={{ icon: formData.icon, iconColor: formData.iconColor, textIcon: formData.textIcon }}
+          onChange={setIconState}
+          defaultColor={DEFAULT_COLOR}
+          defaultTextIcon={DEFAULT_TEXT_ICON}
+          name={formData.name}
+        />
         <Input
           label="Prefix"
           value={formData.prefix}
@@ -179,5 +218,8 @@ AddCustomEmbeddingModal.propTypes = {
     name: PropTypes.string,
     prefix: PropTypes.string,
     baseUrl: PropTypes.string,
+    icon: PropTypes.string,
+    iconColor: PropTypes.string,
+    textIcon: PropTypes.string,
   }),
 };

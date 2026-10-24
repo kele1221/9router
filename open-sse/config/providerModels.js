@@ -113,6 +113,10 @@ export function getModelQuotaFamily(aliasOrId, modelId) {
   return modelQuotaFamily(findModel(models, modelId, aliasOrId));
 }
 
+export function getModelUpstreamPin(aliasOrId, modelId) {
+  return findModel(PROVIDER_MODELS[aliasOrId], modelId, aliasOrId)?.upstreamPin || null;
+}
+
 // OAuth short aliases — derived from registry `alias` (single source). everything else: alias = id.
 // vertex/vertex-partner keep alias=id (kept via the `|| id` fallback in consumers).
 export const OAUTH_ALIASES = Object.fromEntries(

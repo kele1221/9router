@@ -171,6 +171,34 @@ describe("getDistinctProviders — providers route (no full-row parse)", () => {
   });
 });
 
+describe("request detail upstream observation", () => {
+  it("stores a bounded upstream observation beside the provider request", async () => {
+    await saveDetail({
+      id: "upstream-1",
+      provider: "clinepass",
+      model: "cline-pass/deepseek-v4.1-flash",
+      status: "success",
+      tokens: { prompt_tokens: 1, completion_tokens: 1 },
+      request: {},
+      response: {},
+      upstream: {
+        expected: "deepseek",
+        actual: "deepseek",
+        observed: true,
+        match: "adopted",
+      },
+    });
+
+    const row = await db.getRequestDetailById("upstream-1");
+    expect(row.upstream).toEqual({
+      expected: "deepseek",
+      actual: "deepseek",
+      observed: true,
+      match: "adopted",
+    });
+  });
+});
+
 describe("token helpers — render-time crash safety", () => {
   it("undefined/null tokens → 0, no throw", () => {
     expect(getInputTokens(undefined)).toBe(0);

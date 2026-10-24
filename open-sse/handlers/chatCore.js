@@ -6,7 +6,7 @@ import { normalizeClaudePassthrough, anchorClaudeCache } from "../translator/for
 import { createStreamController } from "../utils/streamHandler.js";
 import { refreshWithRetry } from "../services/tokenRefresh.js";
 import { createRequestLogger } from "../utils/requestLogger.js";
-import { getModelTargetFormat, getModelSupportedFormats, getModelStrip, getModelUpstreamId, getModelType, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.js";
+import { getModelTargetFormat, getModelSupportedFormats, getModelStrip, getModelUpstreamId, getModelType, getModelUpstreamPin, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.js";
 import { PROVIDERS } from "../config/providers.js";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.js";
 import { upstreamResponseHeaders } from "../utils/upstreamHeaders.js";
@@ -33,6 +33,7 @@ import { stripUnsupportedModalities } from "../translator/concerns/modality.js";
 import { prefetchRemoteImages } from "../translator/concerns/prefetch.js";
 import { defaultClaudeToolType, shouldDefaultClaudeToolType } from "../translator/concerns/toolCall.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
+import { applyClinePassRouting, buildClinePassUpstreamObservation } from "../shared/clinePassRouting.js";
 
 /**
  * Core chat handler - shared between SSE and Worker
@@ -112,6 +113,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (useTransport && credentials) credentials.runtimeTransport = useTransport;
   const stripList = getModelStrip(alias, model);
   const upstreamModel = getModelUpstreamId(alias, model);
+  const upstreamPin = provider === "clinepass" ? getModelUpstreamPin(alias, model) : null;
+  const upstreamObservation = provider === "clinepass"
+    ? buildClinePassUpstreamObservation(upstreamPin?.upstreams?.[0] || null, null)
+    : null;
 
   // Inject provider-level thinking config override (only if client hasn't set)
   // on/off → extended type (body.thinking), none/low/medium/high → effort type (body.reasoning_effort)
@@ -333,6 +338,13 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   // system/tools/messages, and a stale anchor costs a full prefix rewrite.
   if (passthrough && clientTool === "claude") anchorClaudeCache(translatedBody);
 
+  // Apply the server-owned ClinePass channel pin after every body transform.
+  // Doing this here covers OpenAI Chat, Codex Responses, and Claude Messages
+  // without trusting client-supplied routing fields on the translated body.
+  if (upstreamPin) {
+    translatedBody = applyClinePassRouting({ provider, body: translatedBody, pin: upstreamPin });
+  }
+
   const executor = getExecutor(provider);
   trackPendingRequest(model, provider, connectionId, true);
   appendRequestLog({ model, provider, connectionId, status: "PENDING" }).catch(() => { });
@@ -422,6 +434,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       response: { error: error.message || String(error), status: error.name === "AbortError" ? 499 : 502, thinking: null },
       rtk: rtkStats,
       pxpipe: pxpipeSummary,
+      upstream: upstreamObservation,
       status: "error"
     })).catch(() => { });
 
@@ -514,6 +527,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
       response: { error: message, status: statusCode, thinking: null },
       rtk: rtkStats,
       pxpipe: pxpipeSummary,
+      upstream: upstreamObservation,
       status: "error"
     })).catch(() => { });
 
@@ -532,7 +546,7 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
     );
   }
 
-  const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, rtkStats, pxpipe: pxpipeSummary, reqTag, log };
+  const sharedCtx = { provider, model, body, stream, translatedBody, finalBody, requestStartTime, connectionId, apiKey, clientRawRequest, onRequestSuccess, rtkStats, pxpipe: pxpipeSummary, reqTag, log, upstreamObservation };
   const appendLog = (extra) => appendRequestLog({ model, provider, connectionId, ...extra }).catch(() => { });
   const trackDone = () => trackPendingRequest(model, provider, connectionId, false);
 

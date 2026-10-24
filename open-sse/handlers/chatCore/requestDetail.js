@@ -93,6 +93,7 @@ export function buildRequestDetail(base, overrides = {}) {
     response: base.response || {},
     rtk: base.rtk || base.rtkStats || undefined,
     pxpipe: base.pxpipe || undefined,
+    upstream: base.upstream || undefined,
     status: base.status || "success",
     ...overrides
   };

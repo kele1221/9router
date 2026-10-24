@@ -117,6 +117,7 @@ async function flushToDatabase() {
             response: truncateField(item.response, config.maxJsonSize),
             rtk: item.rtk || item.rtkStats || undefined,
             pxpipe: item.pxpipe || undefined,
+            upstream: truncateField(item.upstream, config.maxJsonSize),
           };
 
           db.run(

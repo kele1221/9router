@@ -127,6 +127,13 @@ const getPageInfo = (pathname) => {
       icon: "terminal",
       breadcrumbs: [],
     };
+  if (pathname.includes("/network"))
+    return {
+      title: "网络监控",
+      description: "本机网络质量、VPN 与代理状态的历史趋势与故障归因",
+      icon: "monitor_heart",
+      breadcrumbs: [],
+    };
   if (pathname.includes("/proxy-pools"))
     return {
       title: "Proxy Pools",

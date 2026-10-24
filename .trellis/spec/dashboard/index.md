@@ -23,3 +23,8 @@ Before writing code in `src/`:
 - [API Route Conventions](api-routes.md)
 - [Persistence](persistence.md)
 - [Security](security.md)
+- [Net Monitor Module](net-monitor.md) — 网络监控的指标语义、探测降级、归因优先级、恢复操作边界与相关坑
+
+## Hard Constraints
+
+- **No network-breaking operations**: this machine runs the user's live agent traffic. Never implement, expose, or trigger closing Wi-Fi, taking an interface down, stopping/switching the user's proxy, or rewriting system DNS/routes. Not even as a "recovery" action. See [net-monitor.md](net-monitor.md) for the allowed set and the guard tests.

@@ -108,6 +108,17 @@ export async function PATCH(request) {
         .catch((error) => console.warn("[AutoPing] settings update failed:", error.message));
     }
 
+    // Toggling netMonitor on/off must take effect without a restart: start the
+    // collector now, or stop it so a disabled monitor arms no further timers.
+    if (Object.prototype.hasOwnProperty.call(body, "netMonitor")) {
+      import("@/lib/netMonitor/scheduler.js")
+        .then(({ startNetMonitorScheduler, stopNetMonitorScheduler }) => {
+          stopNetMonitorScheduler();
+          if (settings.netMonitor?.enabled) return startNetMonitorScheduler();
+        })
+        .catch((error) => console.warn("[NetMonitor] settings update failed:", error.message));
+    }
+
     const { password, oidcClientSecret, ...safeSettings } = settings;
     safeSettings.oidcConfigured = !!(safeSettings.oidcIssuerUrl && safeSettings.oidcClientId && oidcClientSecret);
     return NextResponse.json(safeSettings, { headers: SETTINGS_RESPONSE_HEADERS });

@@ -262,6 +262,33 @@ export default function ProfilePage() {
     }
   };
 
+  // netMonitor is a nested object and settingsRepo merges shallowly, so a PATCH
+  // carrying only { enabled } would drop targets/retention. Always send the
+  // merged object.
+  const patchNetMonitor = async (patch) => {
+    const next = { ...(settings.netMonitor || {}), ...patch };
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ netMonitor: next }),
+      });
+      if (res.ok) {
+        setSettings(prev => ({ ...prev, netMonitor: next }));
+      }
+    } catch (err) {
+      console.error("Failed to update netMonitor settings:", err);
+    }
+  };
+
+  const updateNetMonitorEnabled = (enabled) => patchNetMonitor({ enabled });
+
+  const updateNetMonitorInterval = (seconds) => {
+    const n = Number(seconds);
+    if (!Number.isFinite(n) || n <= 0) return;
+    patchNetMonitor({ intervalMs: Math.min(Math.max(Math.round(n), 10), 3600) * 1000 });
+  };
+
   const updateFallbackStrategy = async (strategy) => {
     try {
       const res = await fetch("/api/settings", {
@@ -1546,6 +1573,50 @@ export default function ProfilePage() {
                 onChange={() => updateOutboundProxyEnabled(!(settings.outboundProxyEnabled === true))}
                 disabled={loading || proxyLoading}
               />
+            </div>
+
+            {/* Network quality monitor */}
+            <div className="flex flex-col gap-4 pt-4 border-t border-border/50">
+              <div className="flex items-start sm:items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm sm:text-base">网络质量监控</p>
+                  <p className="text-xs sm:text-sm text-text-muted">
+                    周期性采集本机网络质量（延迟 / 丢包 / 抖动 / DNS）与 VPN、代理状态，用于趋势图表与故障归因。
+                    只读探测，不会改变网络状态。
+                  </p>
+                  <a
+                    href="/dashboard/network"
+                    className="mt-1 inline-block text-xs text-primary underline hover:opacity-80"
+                  >
+                    查看监控面板
+                  </a>
+                </div>
+                <Toggle
+                  checked={settings.netMonitor?.enabled === true}
+                  onChange={() => updateNetMonitorEnabled(!(settings.netMonitor?.enabled === true))}
+                  disabled={loading}
+                />
+              </div>
+
+              {settings.netMonitor?.enabled === true && (
+                <div className="flex items-center justify-between gap-4 pt-2 border-t border-border/50">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base">采集间隔</p>
+                    <p className="text-xs sm:text-sm text-text-muted">
+                      秒。默认 60 秒；调小会更快看到数据，但探测频率更高。
+                    </p>
+                  </div>
+                  <Input
+                    type="number"
+                    min="10"
+                    max="3600"
+                    value={Math.round((settings.netMonitor?.intervalMs ?? 60000) / 1000)}
+                    onChange={(e) => updateNetMonitorInterval(e.target.value)}
+                    disabled={loading}
+                    className="w-20 sm:w-24 text-center shrink-0"
+                  />
+                </div>
+              )}
             </div>
 
             {settings.outboundProxyEnabled === true && (

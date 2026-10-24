@@ -79,6 +79,17 @@ const DEFAULT_SETTINGS = {
   pxpipeTimeoutMs: 15000,
   // Per-provider user header overrides applied at dispatch: { [providerId]: { headers: {..} } }
   providerOverrides: {},
+  netMonitor: {
+    enabled: false,
+    intervalMs: 60000,
+    targets: {
+      icmp: ["1.1.1.1", "8.8.8.8"],
+      tcp: [{ host: "1.1.1.1", port: 443 }],
+      dns: ["github.com", "www.google.com"],
+    },
+    rawRetentionDays: 7,
+    hourlyRetentionDays: 90,
+  },
 };
 
 async function readRaw() {

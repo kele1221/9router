@@ -88,6 +88,9 @@ const LOCAL_ONLY_PATHS = [
   "/api/headroom/start",
   "/api/headroom/stop",
   "/api/headroom/proxy",
+  // Runs remediation actions (flush DNS, reconnect VPN, restart the proxy
+  // controller) — local-only even though none of them can cut the network.
+  "/api/net-monitor/actions",
 ];
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);

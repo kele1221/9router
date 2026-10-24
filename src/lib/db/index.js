@@ -79,6 +79,12 @@ export {
   getEvalSchedules, getEvalScheduleById, createEvalSchedule, updateEvalSchedule, deleteEvalSchedule,
 } from "./repos/modelEvalRepo.js";
 
+// Network quality monitor
+export {
+  insertSamples, getRawHistory, getLatestSamples, getHourlyHistory,
+  aggregateHour, pruneRaw, pruneHourly, pruneEnv, countSamples,
+} from "./repos/netMonitorRepo.js";
+
 // Export/import full DB
 export async function exportDb() {
   const db = await getAdapter();

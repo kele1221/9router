@@ -34,5 +34,14 @@ export async function register() {
     // they start here rather than in bootstrap.js's layout-triggered initializeApp.
     const { startModelEvalScheduler } = await import("@/lib/modelEval/scheduler.js");
     startModelEvalScheduler();
+
+    // Same reason: network quality collection must run 24/7, not only while the
+    // dashboard is open. No-ops while netMonitor.enabled is false.
+    try {
+      const { startNetMonitorScheduler } = await import("@/lib/netMonitor/scheduler.js");
+      startNetMonitorScheduler();
+    } catch (e) {
+      console.warn("[NetMonitor] scheduler warmup failed:", e?.message);
+    }
   }
 }

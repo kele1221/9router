@@ -37,6 +37,7 @@ const systemItems = [
   { href: "/dashboard/update-center", label: "更新中心", icon: "system_update" },
   { href: "/dashboard/routing-governance", label: "链路治理", icon: "account_tree" },
   { href: "/dashboard/error-rules", label: "错误规则", icon: "rule" },
+  { href: "/dashboard/network", label: "网络监控", icon: "monitor_heart" },
   { href: "/dashboard/proxy-pools", label: "Proxy Pools", icon: "lan" },
   { href: "/dashboard/skills", label: "Skills", icon: "extension" },
 ];

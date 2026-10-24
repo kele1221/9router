@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -238,6 +238,47 @@ export const TABLES = {
       createdAt: "TEXT NOT NULL",
       updatedAt: "TEXT NOT NULL",
     },
+  },
+  // One row per probe per collection round. `kind` separates internet probes
+  // (icmp/tcp/dns/upstream) from local environment change events (env), which
+  // are written only when something actually changed.
+  netMonitorSamples: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      ts: "TEXT NOT NULL",
+      target: "TEXT NOT NULL",
+      kind: "TEXT NOT NULL",
+      ok: "INTEGER NOT NULL",
+      rttAvgMs: "INTEGER",
+      rttMinMs: "INTEGER",
+      rttMaxMs: "INTEGER",
+      jitterMs: "INTEGER",
+      lossPct: "REAL",
+      error: "TEXT",
+      createdAt: "TEXT NOT NULL",
+    },
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_nms_ts ON netMonitorSamples(ts DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_nms_target_ts ON netMonitorSamples(target, ts DESC)",
+    ],
+  },
+  netMonitorHourly: {
+    columns: {
+      id: "TEXT PRIMARY KEY",
+      bucket: "TEXT NOT NULL",
+      target: "TEXT NOT NULL",
+      kind: "TEXT NOT NULL",
+      samples: "INTEGER NOT NULL",
+      okCount: "INTEGER NOT NULL",
+      rttAvgMs: "INTEGER",
+      rttP95Ms: "INTEGER",
+      jitterAvgMs: "INTEGER",
+      lossAvgPct: "REAL",
+      createdAt: "TEXT NOT NULL",
+    },
+    indexes: [
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_nmh_bucket_target ON netMonitorHourly(bucket, target, kind)",
+    ],
   },
 };
 

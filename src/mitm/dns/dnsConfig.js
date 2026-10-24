@@ -258,6 +258,7 @@ module.exports = {
   removeAllDNSEntries,
   removeAllDNSEntriesSync,
   execWithPassword,
+  flushDNS,
   isSudoAvailable,
   canRunSudoWithoutPassword,
   isSudoPasswordRequired,

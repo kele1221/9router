@@ -154,9 +154,8 @@ Phase 3: Finish  → verify, update spec, commit, and wrap up
 
 ### Request Triage
 
-- Simple conversation or small task: handle it directly without creating a Trellis task, loading Trellis workflow, or dispatching Trellis sub-agents.
-- Complex task: use Trellis by default; if the user explicitly asks to use Trellis, use it regardless of task size.
-- Only a clearly complex request or an explicit user request may create a Trellis task or enter Trellis planning.
+- Simple conversation or small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.
+- Complex task: ask whether you may create a Trellis task and enter planning. If the user says no, do not do broad inline implementation; explain, clarify scope, or suggest a smaller split.
 - User approval to create a task is not approval to start implementation. Planning still happens first.
 
 ### Planning Artifacts
@@ -178,7 +177,9 @@ Create new children with `task.py create "<title>" --slug <name> --parent <paren
 <!-- Per-turn breadcrumb: shown when there is no active task (before Phase 1) -->
 
 [workflow-state:no_task]
-No active task. Classify the current turn first. Handle a simple conversation or small task directly without Trellis. Use Trellis for clearly complex work, or whenever the user explicitly requests it; when Trellis is appropriate, follow its task-creation consent and planning gates.
+No active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.
+Simple conversation / small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.
+Complex task: ask the user if you can create a Trellis task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.
 [/workflow-state:no_task]
 
 <!-- Per-turn breadcrumb: shown when the active task record cannot be read. -->

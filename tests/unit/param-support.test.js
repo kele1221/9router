@@ -96,4 +96,60 @@ describe("stripUnsupportedParams", () => {
 
     expect(body.messages[0].reasoning_content).toBe("thinking...");
   });
+
+  // Reasoning models spend output tokens on thinking BEFORE emitting content; a
+  // max_tokens below the thinking run yields an empty `content` that some upstreams
+  // report as an error (clinepass deepseek-v4.1-flash → HTTP 500 "empty response
+  // content"). The floor lifts a too-small caller value without ever lowering a
+  // larger one, and without inventing a value the caller deliberately omitted.
+  describe("MIN_OUTPUT_RULES floor (clinepass deepseek)", () => {
+    it("raises a below-floor max_tokens up to the minimum", () => {
+      const body = { max_tokens: 8 };
+
+      stripUnsupportedParams("clinepass", "deepseek-v4.1-flash", body);
+
+      expect(body.max_tokens).toBe(256);
+    });
+
+    it("never lowers a max_tokens already above the floor", () => {
+      const body = { max_tokens: 4096 };
+
+      stripUnsupportedParams("clinepass", "deepseek-v4.1-flash", body);
+
+      expect(body.max_tokens).toBe(4096);
+    });
+
+    it("does not invent a limit when the caller omitted the field", () => {
+      const body = { temperature: 0.5 };
+
+      stripUnsupportedParams("clinepass", "deepseek-v4.1-flash", body);
+
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it("raises max_completion_tokens and max_output_tokens too", () => {
+      const body = { max_completion_tokens: 16, max_output_tokens: 1 };
+
+      stripUnsupportedParams("clinepass", "deepseek-v4.1-flash", body);
+
+      expect(body.max_completion_tokens).toBe(256);
+      expect(body.max_output_tokens).toBe(256);
+    });
+
+    it("does not raise on a non-clinepass provider even for deepseek models", () => {
+      const body = { max_tokens: 8 };
+
+      stripUnsupportedParams("deepseek", "deepseek-v4.1-flash", body);
+
+      expect(body.max_tokens).toBe(8);
+    });
+
+    it("does not raise on clinepass for a non-deepseek model", () => {
+      const body = { max_tokens: 8 };
+
+      stripUnsupportedParams("clinepass", "glm-5.3-flash", body);
+
+      expect(body.max_tokens).toBe(8);
+    });
+  });
 });

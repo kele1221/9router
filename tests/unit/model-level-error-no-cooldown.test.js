@@ -105,3 +105,29 @@ describe("unchanged account-scoped statuses", () => {
     expect(result).toEqual({ shouldFallback: false, cooldownMs: 0 });
   });
 });
+
+// clinepass surfaces an empty model completion as HTTP 500
+// {"error":"empty response content","success":false} — a transient content hiccup,
+// not a credential/quota problem. Previously this hit the default transient branch
+// and locked the (often only) connection for 30s, so the very next turns returned
+// 503 "reset after Xs" even though the upstream had already recovered. The rule
+// keeps shouldFallback (combos still advance) but uses the short 5s cooldown.
+describe("empty-response-content 500: short cooldown, combo still advances", () => {
+  const EMPTY_CONTENT_500 = '[500]: {"error":"empty response content","success":false}';
+
+  it("uses the short (5s) cooldown, not the 30s transient default", () => {
+    const result = checkFallbackError(500, EMPTY_CONTENT_500, 0, "clinepass");
+    expect(result.shouldFallback).toBe(true);
+    expect(result.cooldownMs).toBe(5_000);
+  });
+
+  it("still lets a combo advance to its next model", () => {
+    expect(shouldTryNextModel(500, EMPTY_CONTENT_500, 0, "clinepass")).toBe(true);
+  });
+
+  it("a plain 500 (no marker) keeps the longer transient default", () => {
+    const result = checkFallbackError(500, "internal server error", 0, "clinepass");
+    expect(result.shouldFallback).toBe(true);
+    expect(result.cooldownMs).toBeGreaterThan(5_000);
+  });
+});

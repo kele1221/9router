@@ -32,6 +32,26 @@ const STRIP_RULES = [
   { provider: "cerebras", dropMessageFields: ["reasoning_content", "reasoning", "reasoning_details"] },
 ];
 
+// Reasoning models spend output tokens on thinking BEFORE emitting any content, so
+// a max_tokens smaller than the thinking run streams an empty `content` and the
+// upstream reports that as an error rather than as a truncation.
+//
+// ClinePass is the sharpest case: `cline-pass/deepseek-v4.1-flash` answers
+// HTTP 500 {"error":"empty response content","success":false} for max_tokens <= 16
+// and 200 from 24 upward (probed live). The engine then reads that 500 as a
+// transient server fault — it retries, locks the only connection for the transient
+// cooldown, and burns a combo slot. None of that is a server fault: the caller
+// simply asked for fewer tokens than the model needs before it can start answering.
+//
+// Raising the floor (never lowering a larger caller-supplied value) keeps the
+// request valid instead of converting it into a fake outage. A caller asking for
+// 8 tokens still gets a short answer — it just also gets the thinking overhead it
+// did not account for.
+const MIN_OUTPUT_RULES = [
+  // DeepSeek V4.x on ClinePass: the thinking run routinely exceeds 16 tokens.
+  { provider: "clinepass", match: /deepseek/i, minTokens: 256 },
+];
+
 // Test a rule's match (regex or predicate) against the model id.
 function matches(rule, model) {
   if (!rule.match) return true;
@@ -41,6 +61,15 @@ function matches(rule, model) {
 function clampNumber(body, key, ceiling) {
   if (typeof body[key] === "number" && Number.isFinite(body[key]) && body[key] > ceiling) {
     body[key] = ceiling;
+  }
+}
+
+// Lift a token-limit field up to a floor, never down. `undefined` stays undefined so
+// we do not invent a limit for a caller that deliberately omitted one (some upstreams
+// treat an absent max_tokens differently from an explicit value).
+function raiseNumber(body, key, floor) {
+  if (typeof body[key] === "number" && Number.isFinite(body[key]) && body[key] < floor) {
+    body[key] = floor;
   }
 }
 
@@ -88,6 +117,16 @@ export function stripUnsupportedParams(provider, model, body) {
         clampNumber(body, "max_output_tokens", ceiling);
       }
     }
+  }
+
+  // Raise (never lower) the output-token floor for reasoning models. Applied after
+  // the cap rules so a model whose own ceiling is below the floor still wins.
+  for (const rule of MIN_OUTPUT_RULES) {
+    if (rule.provider && rule.provider !== provider) continue;
+    if (!matches(rule, model)) continue;
+    raiseNumber(body, "max_tokens", rule.minTokens);
+    raiseNumber(body, "max_completion_tokens", rule.minTokens);
+    raiseNumber(body, "max_output_tokens", rule.minTokens);
   }
   return body;
 }

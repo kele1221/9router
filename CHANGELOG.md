@@ -1,3 +1,9 @@
+# v0.5.99-k.3 (2026-10-12)
+
+## Fix
+- **ClinePass flaky 500 / cascading 503**: cline.bot surfaces a transient empty model completion as HTTP 500 `{"error":"empty response content","success":false}`. `DEFAULT_RETRY_CONFIG` only covers 429/502/503/504, so the 500 got no executor retry; `checkFallbackError` then took the default transient branch and locked the (often only) clinepass connection for the cooldown, so the very next turn returned `503 "[clinepass/…] [500]: … (reset after Xs)"` even though the account was healthy — there was no retry and no other account to fall back to. The clinepass registry now declares `retry: { 500: { attempts: 2, delayMs: 1500 } }`, shallow-merged over the defaults in `BaseExecutor.execute` (429/502/503/504 retries retained), so the flaky 500 is retried in place before any account lock is considered. Pinned by a guard test so the entry can't be removed silently.
+- **ClinePass empty-content 500 cooldown**: the executor retry alone can't save a sustained upstream blip (observed cline.bot returning the empty-content 500 for ~16s, surviving all 2 retries). The 30s transient account lock then放大 the failure window far beyond the actual outage: cline.bot recovered in ~16s but the connection stayed locked the full 30s, so subsequent turns kept returning `503 (reset after Xs)`. `ERROR_RULES` now matches `"empty response content"` to the short 5s cooldown (`COOLDOWN.short`) while keeping `shouldFallback=true`, so combos still advance to the next model but the account is re-tryable within seconds of the upstream recovering. A regression test pins the 5s cooldown and that combos still advance.
+
 # v0.5.99-k.2 (2026-10-11)
 
 ## Fix

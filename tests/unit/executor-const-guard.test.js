@@ -9,6 +9,7 @@ import { DEFAULT_MAX_TOKENS, DEFAULT_MIN_TOKENS } from "../../open-sse/config/ru
 import mimoFree from "../../open-sse/providers/registry/mimo-free.js";
 import opencode from "../../open-sse/providers/registry/opencode.js";
 import antigravity from "../../open-sse/providers/registry/antigravity.js";
+import clinepass from "../../open-sse/providers/registry/clinepass.js";
 import { OpenCodeExecutor } from "../../open-sse/executors/opencode.js";
 
 describe("compat base URLs / version", () => {
@@ -45,6 +46,19 @@ describe("antigravity retry (intentional change: 429=3, 503=3)", () => {
   });
   it("503 attempts = 3", () => {
     expect(antigravity.transport.retry["503"].attempts).toBe(3);
+  });
+});
+
+// Cline surfaces an empty model completion as HTTP 500
+// {"error":"empty response content","success":false} — a transient blip. Without
+// a 500 retry entry, DEFAULT_RETRY_CONFIG (429/502/503/504 only) gives no retry,
+// the 500 then locks the only connection for the transient cooldown, and the next
+// turn returns 503 "reset after Xs" even though the account is healthy. Pin the
+// retry so it can't be removed silently.
+describe("clinepass retry (flaky empty-content 500 must be retried)", () => {
+  it("500 attempts = 2, delay = 1500ms", () => {
+    expect(clinepass.transport.retry["500"].attempts).toBe(2);
+    expect(clinepass.transport.retry["500"].delayMs).toBe(1500);
   });
 });
 

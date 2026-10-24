@@ -155,6 +155,12 @@ export const ERROR_RULES = [
   { text: "quota exceeded",           backoff: true },
   { text: "capacity",                 backoff: true },
   { text: "overloaded",               backoff: true },
+  // Upstream returned a 500 with an empty completion body (e.g. clinepass deepseek-flaky
+  // "empty response content"). This is a transient content hiccup, not a credential/quota
+  // problem: keep shouldFallback so combos advance to the next model, but use a short
+  // cooldown instead of the 30s transient default so the account is re-tryable as soon as
+  // the upstream recovers (the failure window seen in logs is ~5-16s, far shorter than 30s).
+  { text: "empty response content",   cooldownMs: COOLDOWN.short },
 
   // --- Status-based rules (fallback when text doesn't match) ---
   { status: 401, cooldownMs: COOLDOWN.long },

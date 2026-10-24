@@ -27,6 +27,16 @@ export default {
     },
     // Non-stream chat completions come back wrapped in {"success":true,"data":{...}}
     quirks: { clineEnvelope: true },
+    // Retry flaky upstream 500s. Cline surfaces an empty model completion as
+    // HTTP 500 {"error":"empty response content","success":false} — a transient
+    // blip, not a hard outage. DEFAULT_RETRY_CONFIG only covers 429/502/503/504,
+    // so without this entry the 500 gets no retry, then locks the only connection
+    // for the transient cooldown (30s default), making the very next turn return
+    // 503 "reset after Xs" even though the account is healthy. Shallow-merged over
+    // the defaults (base.js), so 429/502/503/504 retries are retained.
+    retry: {
+      500: { attempts: 2, delayMs: 1500 },
+    },
     auth: {
       combined: true,
       header: "Authorization",
@@ -48,8 +58,16 @@ export default {
   // `deepseek-v4.1-flash` — referenced by the local combo config — was missing.
   // Every id below was verified 200 at 2026-10-12; re-probe before editing.
   models: [
-    { id: "cline-pass/deepseek-v4-pro", name: "DeepSeek V4 Pro (ClinePass)" },
-    { id: "cline-pass/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash (ClinePass)" },
+    {
+      id: "cline-pass/deepseek-v4-pro",
+      name: "DeepSeek V4 Pro (ClinePass)",
+      upstreamPin: { mode: "strict", upstreams: ["deepseek"] },
+    },
+    {
+      id: "cline-pass/deepseek-v4.1-flash",
+      name: "DeepSeek V4.1 Flash (ClinePass)",
+      upstreamPin: { mode: "strict", upstreams: ["deepseek"] },
+    },
     { id: "cline-pass/glm-5.3", name: "GLM-5.3 (ClinePass)" },
     { id: "cline-pass/glm-5.3-flash", name: "GLM-5.3 Flash (ClinePass)" },
     { id: "cline-pass/kimi-k3", name: "Kimi K3 (ClinePass)" },

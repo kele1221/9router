@@ -107,7 +107,15 @@ export function createSSEStream(options = {}) {
       if (isPassthrough) usage = finalUsage; else state.usage = finalUsage;
     }
 
-    if (hasValidUsage(finalUsage)) {
+    // HTTP 200 followed by an EOF with zero content and no usage is not a success:
+    // the upstream dropped the pipe before the first chunk (observed today as
+    // clinepass streams ending 5-8s in with ttft 0 and IN/OUT 0). Recording it as
+    // "200 OK" made the dashboard show a successful request that consumed nothing.
+    const emptyEof = !hasValidUsage(finalUsage) && totalContentLength === 0;
+
+    if (emptyEof) {
+      appendRequestLog({ model, provider, connectionId, tokens: null, status: "STREAM_EMPTY_EOF" }).catch(() => { });
+    } else if (hasValidUsage(finalUsage)) {
       logUsage(isPassthrough ? provider : (state?.provider || targetFormat), finalUsage, model, connectionId, apiKey);
     } else {
       appendRequestLog({ model, provider, connectionId, tokens: null, status: "200 OK" }).catch(() => { });
@@ -117,7 +125,7 @@ export function createSSEStream(options = {}) {
       onStreamComplete({
         content: accumulatedContent,
         thinking: accumulatedThinking
-      }, finalUsage, ttftAt);
+      }, finalUsage, ttftAt, emptyEof ? "stream_empty_eof" : null);
     }
   };
 

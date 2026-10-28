@@ -122,7 +122,7 @@ export async function handleStreamingResponse({ providerResponse, provider, mode
 export function buildOnStreamComplete({ provider, model, connectionId, apiKey, requestStartTime, body, stream, finalBody, translatedBody, clientRawRequest, rtkStats, pxpipe, reqTag, log, upstreamObservation }) {
   const streamDetailId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-  const onStreamComplete = (contentObj, usage, ttftAt) => {
+  const onStreamComplete = (contentObj, usage, ttftAt, errorCode = null) => {
     const latency = {
       ttft: ttftAt ? ttftAt - requestStartTime : Date.now() - requestStartTime,
       total: Date.now() - requestStartTime
@@ -137,11 +137,18 @@ export function buildOnStreamComplete({ provider, model, connectionId, apiKey, r
       request: extractRequestConfig(body, stream),
       providerRequest: finalBody || translatedBody || null,
       providerResponse: safeContent,
-      response: { content: safeContent, thinking: safeThinking, type: "streaming" },
+      response: {
+        content: safeContent,
+        // `stream_empty_eof`: HTTP 200, zero content, no usage — the upstream closed
+        // the pipe before the first chunk. Not a success, so it must not read as one.
+        ...(errorCode ? { error: errorCode, status: 502 } : {}),
+        thinking: safeThinking,
+        type: "streaming"
+      },
       rtk: rtkStats,
       pxpipe,
       upstream: upstreamObservation,
-      status: "success"
+      status: errorCode || "success"
     }, { id: streamDetailId })).catch(err => {
       console.error("[RequestDetail] Failed to update streaming content:", err.message);
     });

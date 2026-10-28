@@ -115,8 +115,37 @@ export function observeClinePassRouting(observation, json) {
   if (!observation) return observation;
   const actual = extractClinePassRouting(json);
   if (!actual) return observation;
+  // Keep the first real routing fact. Only frames that carry it are read, so
+  // after the gateway has stated one, a later frame repeating a different
+  // spelling means the pipeline changed — not that the request did.
+  if (observation.observed) return observation;
   observation.actual = actual;
   observation.observed = true;
   observation.match = upstreamMatches(observation.expected, actual) ? "adopted" : "not-adopted";
   return observation;
+}
+
+/**
+ * Channel names the router discloses in its own error text when it refuses a
+ * pin. A probe pinned to a channel that cannot exist fails before spending a
+ * token and, instead of serving the request, names every channel it could have
+ * used — which both proves the pin is honoured and yields the list to show.
+ *
+ * Two shapes: the Vercel AI Gateway planner says "Available providers are: a, b",
+ * the OpenRouter direct pipeline returns `error.metadata.available_providers`.
+ */
+export function extraUpstreamsFromError(message) {
+  const text = String(message ?? "");
+  const matched = /available providers are:\s*([^."]+)/i.exec(text);
+  if (matched) {
+    return [...new Set(matched[1].split(/,\s*/).map((name) => name.trim()).filter((name) => /^[a-z0-9][a-z0-9._-]*$/i.test(name)))];
+  }
+  const start = text.indexOf("{");
+  if (start < 0) return [];
+  try {
+    const list = JSON.parse(text.slice(start))?.error?.metadata?.available_providers;
+    return Array.isArray(list) ? [...new Set(list.map(String))] : [];
+  } catch {
+    return [];
+  }
 }

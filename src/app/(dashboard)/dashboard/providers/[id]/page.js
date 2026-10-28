@@ -24,6 +24,7 @@ import AddCustomModelModal from "./AddCustomModelModal";
 import BulkImportCodexModal from "./BulkImportCodexModal";
 import BulkImportGrokCliModal from "./BulkImportGrokCliModal";
 import CustomConfigCard from "./CustomConfigCard";
+import ClinePassUpstreamCard from "./ClinePassUpstreamCard";
 
 const ONE_BY_ONE_DELAY_MS = 1000;
 
@@ -1777,6 +1778,9 @@ export default function ProviderDetailPage() {
 
       {/* Per-provider user overrides (custom headers / connect timeout) */}
       <CustomConfigCard providerId={providerId} />
+
+      {/* ClinePass: which upstream channels each pinned model may use */}
+      <ClinePassUpstreamCard providerId={providerId} models={models} />
 
       {/* Models */}
       <Card>
